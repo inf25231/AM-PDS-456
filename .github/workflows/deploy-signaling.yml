@@ -2,23 +2,50 @@ name: Deploy Server
 
 on:
   push:
-    branches: [main]
+    branches:
+        - main
     paths:
       - 'apps/signaling-server/**'  # trigger only when files in signaling server root change
+      - '.github/workflows/deploy-signaling.yml'
+
+concurrency:
+  group: deploy-signaling-production
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - name: Deploy to Oracle
+      - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
-          script_stop: true
+          command_timeout: 30m
+          debug: true
           script: |
-            cd ~/AM-PDS-456/apps/signaling-server
-            git pull origin main
-            npm install
-            pm2 restart signaling
+            set -Eeuo pipefail
+
+            APP_DIR="$HOME/AM-PDS-456/apps/signaling-server"
+
+            echo "Using app dir: $APP_DIR"
+            test -d "$APP_DIR"
+            cd "$APP_DIR"
+
+            test -d .git
+            git fetch origin main
+            git reset --hard origin/main
+
+            if [ -f package-lock.json ]; then
+              npm ci --omit=dev
+            else
+              npm install --omit=dev
+            fi
+
+            pm2 describe signaling > /dev/null
+            pm2 reload signaling --update-env || pm2 restart signaling --update-env
+
+            pm2 save
