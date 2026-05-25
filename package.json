@@ -1,6 +1,7 @@
 {
   "name": "amphi-calls",
   "private": true,
+  "packageManager": "pnpm@10.22.0",
   "scripts": {
     "web:dev": "pnpm --filter web-app dev",
     "dev:web": "pnpm --filter web-app dev",
