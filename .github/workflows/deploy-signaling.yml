@@ -1,4 +1,5 @@
 name: Deploy Server
+run-name: Deploy from ${{ github.ref_name }} by @${{ github.actor }}
 
 on:
   push:
@@ -14,6 +15,7 @@ concurrency:
 
 jobs:
   deploy:
+    name: Deploy to production
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -31,23 +33,23 @@ jobs:
 
             APP_DIR="$HOME/AM-PDS-456/apps/signaling-server"
 
-            echo "Deploying in $APP_DIR"
+            echo "::group::Deploy"
             cd "$APP_DIR"
-
             git fetch origin main
             git reset --hard origin/main
-
             if [ -f package-lock.json ]; then
               npm ci --omit=dev
             else
               npm install --omit=dev
             fi
-
             if pm2 describe signaling >/dev/null 2>&1; then
               pm2 restart signaling --update-env
             else
               pm2 start src/index.js --name signaling
             fi
-
             pm2 save
+            echo "::endgroup::"
+
+            echo "::group::PM2 status"
             pm2 status
+            echo "::endgroup::"
