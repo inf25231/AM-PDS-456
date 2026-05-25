@@ -17,6 +17,7 @@ wss.on('connection', (ws) => {
       if (!rooms.has(currentRoom)) rooms.set(currentRoom, new Set());
       rooms.get(currentRoom).add(ws);
       console.log(`joined room: ${currentRoom}`);
+      return;
     }
 
     // forward all other messages to peers in the same room

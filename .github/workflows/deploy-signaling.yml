@@ -1,0 +1,23 @@
+name: Deploy Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/signaling/**'  # trigger only when files in signaling server root change
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Oracle
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd ~/AM-PSD-456/apps/signaling-server
+            git pull origin main
+            npm install --production
+            pm2 restart signaling
