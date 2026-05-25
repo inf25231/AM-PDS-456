@@ -1,6 +1,14 @@
 <script lang="ts">
+    import type { Snippet } from "svelte";
+
+    /**
+     * Simple layout wrapper for the bottom control row.
+     *
+     * The route decides what buttons live here. This component only pins the row
+     * to the bottom center and keeps spacing consistent.
+     */
     type Props = {
-        children?: () => unknown;
+        children?: Snippet;
     };
 
     let { children }: Props = $props();

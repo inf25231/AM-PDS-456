@@ -1,4 +1,10 @@
 <script lang="ts">
+    /**
+     * Generic icon-only media control button.
+     *
+     * It is reused for camera, microphone, and placeholder utility actions so all
+     * control buttons keep the same visual treatment and interaction contract.
+     */
     type Props = {
         loading?: boolean;
         active?: boolean;
