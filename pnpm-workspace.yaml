@@ -3,4 +3,3 @@ packages:
   - packages/*
 allowBuilds:
   esbuild: true
-  inotify: true
