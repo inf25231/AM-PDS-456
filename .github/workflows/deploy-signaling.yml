@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Deploy over SSH
+      - name: Deploy to Oracle
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.ORACLE_HOST }}
@@ -31,11 +31,9 @@ jobs:
 
             APP_DIR="$HOME/AM-PDS-456/apps/signaling-server"
 
-            echo "Using app dir: $APP_DIR"
-            test -d "$APP_DIR"
+            echo "Deploying in $APP_DIR"
             cd "$APP_DIR"
 
-            test -d .git
             git fetch origin main
             git reset --hard origin/main
 
@@ -45,7 +43,11 @@ jobs:
               npm install --omit=dev
             fi
 
-            pm2 describe signaling > /dev/null
-            pm2 reload signaling --update-env || pm2 restart signaling --update-env
+            if pm2 describe signaling >/dev/null 2>&1; then
+              pm2 restart signaling --update-env
+            else
+              pm2 start src/index.js --name signaling
+            fi
 
             pm2 save
+            pm2 status
