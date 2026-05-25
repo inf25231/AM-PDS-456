@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/signaling/**'  # trigger only when files in signaling server root change
+      - 'apps/signaling-server/**'  # trigger only when files in signaling server root change
 
 jobs:
   deploy:
