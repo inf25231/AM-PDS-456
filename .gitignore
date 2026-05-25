@@ -1,0 +1,39 @@
+node_modules
+app.d.ts
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+.npmrc
+.vscode/
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# SvelteKit
+**/.svelte-kit/
+*.log
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+pnpm-lock.yaml
+package-lock.json
+
+# WSL Trash
+*.Identifier

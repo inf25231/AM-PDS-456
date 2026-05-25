@@ -1,0 +1,12 @@
+{
+  "name": "amphi-calls",
+  "private": true,
+  "scripts": {
+    "web:dev": "pnpm --filter web-app dev",
+    "dev:web": "pnpm --filter web-app dev",
+    "signal:dev": "pnpm --filter signaling-server dev",
+    "dev:signal": "pnpm --filter signaling-server dev",
+    "build": "pnpm -r build",
+    "check": "pnpm -r check"
+  }
+}
