@@ -5,10 +5,10 @@ Small pnpm workspace with two apps:
 - `apps/web-app` — SvelteKit client application
 - `apps/signaling-server` — small WebSocket signaling server
 
-## Requirements
+## Environment
 
-- Node.js 20+
-- pnpm 9+
+- Node.js 24+
+- pnpm 11+
 
 ## Install
 
@@ -34,24 +34,12 @@ Start the web application in development mode:
 pnpm web:dev
 ```
 
-Legacy alias that does the same thing:
-
-```bash
-pnpm dev:web
-```
-
 ## Run The Signaling Server
 
 Start the signaling server in watch mode:
 
 ```bash
 pnpm signal:dev
-```
-
-Legacy alias that does the same thing:
-
-```bash
-pnpm dev:signal
 ```
 
 ## Build
@@ -62,13 +50,7 @@ Build all workspace packages:
 pnpm build
 ```
 
-## Useful Commands
-
-Check the whole workspace:
-
-```bash
-pnpm check
-```
+## Other Commands
 
 Run only the web app build:
 
