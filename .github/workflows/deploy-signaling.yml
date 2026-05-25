@@ -16,8 +16,9 @@ jobs:
           host: ${{ secrets.ORACLE_HOST }}
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
+          script_stop: true
           script: |
-            cd ~/AM-PSD-456/apps/signaling-server
+            cd ~/AM-PDS-456/apps/signaling-server
             git pull origin main
-            npm install --production
+            npm install
             pm2 restart signaling
