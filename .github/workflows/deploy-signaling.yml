@@ -2,6 +2,7 @@ name: Deploy Server
 run-name: Deploy from ${{ github.ref_name }} by @${{ github.actor }}
 
 on:
+  workflow_dispatch:
   push:
     branches:
         - main
