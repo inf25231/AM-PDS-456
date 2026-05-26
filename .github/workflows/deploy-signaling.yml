@@ -42,6 +42,14 @@ jobs:
             else
               npm install --omit=dev
             fi
+
+            cat > .env << 'EOF'
+            PORT=${{ secrets.PORT }}
+            LIVEKIT_API_KEY=${{ secrets.LIVEKIT_API_KEY }}
+            LIVEKIT_API_SECRET=${{ secrets.LIVEKIT_API_SECRET }}
+            LIVEKIT_URL=${{ secrets.LIVEKIT_URL }}
+            EOF
+            
             if pm2 describe signaling >/dev/null 2>&1; then
               pm2 restart signaling --update-env
             else
