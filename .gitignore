@@ -32,8 +32,6 @@ vite.config.ts.timestamp-*
 # Logs
 npm-debug.log*
 pnpm-debug.log*
-pnpm-lock.yaml
-package-lock.json
 
 # WSL Trash
 *.Identifier
