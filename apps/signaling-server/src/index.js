@@ -1,42 +1,38 @@
-import { WebSocketServer } from 'ws';
+import express from 'express';
+import cors from 'cors';
+import { AccessToken } from 'livekit-server-sdk';
+import 'dotenv/config';
 
-const PORT = process.env.PORT || 8080;
-const wss = new WebSocketServer({ port: PORT });
+const app = express();
+const PORT = process.env.PORT;
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
+const LIVEKIT_URL = process.env.LIVEKIT_URL;
 
-// roomId -> Set of WebSocket clients
-const rooms = new Map();
+app.use(cors());
+app.use(express.json());
 
-wss.on('connection', (ws) => {
-  let currentRoom = null;
+app.get('/token', async (req, res) => {
+  const { room, username } = req.query;
 
-  ws.on('message', (raw) => {
-    const msg = JSON.parse(raw);
+  if (!room || !username) {
+    return res.status(400).json({ error: 'room and username are required' });
+  }
 
-    if (msg.type === 'join-room') {
-      currentRoom = msg.roomId;
-      if (!rooms.has(currentRoom)) rooms.set(currentRoom, new Set());
-      rooms.get(currentRoom).add(ws);
-      console.log(`joined room: ${currentRoom}`);
-      return;
-    }
-
-    // forward all other messages to peers in the same room
-    if (currentRoom && rooms.has(currentRoom)) {
-      for (const peer of rooms.get(currentRoom)) {
-        if (peer !== ws && peer.readyState === 1) {
-          peer.send(raw.toString());
-        }
-      }
-    }
+  const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    identity: username,
   });
 
-  ws.on('close', () => {
-    if (currentRoom && rooms.has(currentRoom)) {
-      rooms.get(currentRoom).delete(ws);
-      if (rooms.get(currentRoom).size === 0) rooms.delete(currentRoom);
-      console.log(`left room: ${currentRoom}`);
-    }
+  token.addGrant({
+    roomJoin: true,
+    room,
+    canPublish: true,
+    canSubscribe: true,
   });
+
+  res.json({ token: await token.toJwt() });
 });
 
-console.log(`Signaling server running on ws://localhost:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Signaling server running on port ${PORT}`);
+});
