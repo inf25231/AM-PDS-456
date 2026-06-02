@@ -1,5 +1,5 @@
 /**
- * by ove. 2026
+ * camera & mic error front-end handler
  */
 
 export type MediaTarget = 'camera' | 'microphone' | 'media';

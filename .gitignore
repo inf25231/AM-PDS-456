@@ -20,6 +20,7 @@ Thumbs.db
 !.env.test
 .npmrc
 .vscode/
+.idea/
 
 # Vite
 vite.config.js.timestamp-*

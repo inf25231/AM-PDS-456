@@ -78,27 +78,32 @@
     let isApplyingQuality = $state(false);
     let availableVideoDevices = $state<DeviceOption[]>([]);
     let availableAudioDevices = $state<DeviceOption[]>([]);
-    let infoBrowser = $state("Unknown");
-    let infoCameraName = $state("-");
-    let infoMicrophoneName = $state("-");
-    let infoMicrophoneLevel = $state(0);
-    let infoMicrophoneLevelSnapshot = $state(0);
-    let infoMicrophoneMuted = $state(true);
-    let infoCameraMuted = $state(true);
-    let performanceFps = $state<number | null>(null);
-    let performanceRenderFps = $state<number | null>(null);
-    let performanceFrameTimeMs = $state<number | null>(null);
-    let performanceTrackFrameRate = $state<number | null>(null);
-    let performanceTargetFrameRate = $state<number | ConstrainULong | null>(
-        null,
-    );
-    let performanceResolution = $state<{
-        width: number | null;
-        height: number | null;
-    } | null>(null);
-    let infoAudioContext: AudioContext | null = null;
-    let infoAudioSource: MediaStreamAudioSourceNode | null = null;
-    let infoAnalyser: AnalyserNode | null = null;
+
+    let debug = $state({
+        browser: "Unknown",
+        cameraName: "-",
+        microphoneName: "-",
+        microphoneLevel: 0,
+        microphoneLevelSnapshot: 0,
+        microphoneMuted: true,
+        cameraMuted: true,
+    });
+
+    let perf = $state<{
+        fps: number | null;
+        renderFps: number | null;
+        frameTimeMs: number | null;
+        trackFrameRate: number | null;
+        targetFrameRate: number | ConstrainULong | null;
+        resolution: { width: number | null; height: number | null } | null;
+    }>({
+        fps: null,
+        renderFps: null,
+        frameTimeMs: null,
+        trackFrameRate: null,
+        targetFrameRate: null,
+        resolution: null,
+    });
 
     const DEBUG_INFO_SAMPLE_INTERVAL_MS = 250;
     const MICROPHONE_LEVEL_SAMPLE_INTERVAL_MS = 48;
@@ -117,6 +122,10 @@
     let previousPerformanceRenderLoopFrames = 0;
     let previousPerformanceSampleTime = 0;
     let previousPerformanceRenderedFrames = 0;
+
+    let audioContext: AudioContext | null = null;
+    let audioSource: MediaStreamAudioSourceNode | null = null;
+    let audioAnalyser: AnalyserNode | null = null;
 
     /**
      * Returns whether the live microphone meter should currently sample audio.
@@ -235,27 +244,27 @@
     function refreshDebugInfoSnapshot(includeMicrophoneLevelSnapshot = true) {
         const [videoTrack] = cameraStream?.getVideoTracks() ?? [];
         const [audioTrack] = microphoneStream?.getAudioTracks() ?? [];
-        infoCameraName = videoTrack?.label || "-";
-        infoMicrophoneName = audioTrack?.label || "-";
-        infoCameraMuted =
+        debug.cameraName = videoTrack?.label || "-";
+        debug.microphoneName = audioTrack?.label || "-";
+        debug.cameraMuted =
             !cameraStream ||
             !videoTrack ||
             videoTrack.muted ||
             !videoTrack.enabled ||
             cameraState !== "ready";
-        infoMicrophoneMuted =
+        debug.microphoneMuted =
             !microphoneStream ||
             !audioTrack ||
             audioTrack.muted ||
             !audioTrack.enabled ||
             microphoneState !== "ready";
 
-        if (infoMicrophoneMuted) {
-            infoMicrophoneLevel = 0;
+        if (debug.microphoneMuted) {
+            debug.microphoneLevel = 0;
         }
 
         if (includeMicrophoneLevelSnapshot) {
-            infoMicrophoneLevelSnapshot = infoMicrophoneLevel;
+            debug.microphoneLevelSnapshot = debug.microphoneLevel;
         }
     }
 
@@ -269,14 +278,14 @@
         const [videoTrack] = cameraStream?.getVideoTracks() ?? [];
         const settings = videoTrack?.getSettings();
 
-        performanceResolution = settings
+        perf.resolution = settings
             ? {
                   width: settings.width ?? null,
                   height: settings.height ?? null,
               }
             : null;
-        performanceTrackFrameRate = settings?.frameRate ?? null;
-        performanceTargetFrameRate =
+        perf.trackFrameRate = settings?.frameRate ?? null;
+        perf.targetFrameRate =
             getVideoConstraintsByQuality(selectedQuality).frameRate ?? null;
     }
 
@@ -289,24 +298,18 @@
      * Ensures that Web Audio analysis nodes exist for the live microphone meter.
      */
     function ensureAudioAnalysis() {
-        if (
-            !microphoneStream ||
-            infoAudioContext ||
-            infoAudioSource ||
-            infoAnalyser
-        )
+        if (!microphoneStream || audioContext || audioSource || audioAnalyser)
             return;
 
         try {
-            infoAudioContext = new AudioContext();
-            infoAnalyser = infoAudioContext.createAnalyser();
+            audioContext = new AudioContext();
+            audioAnalyser = audioContext.createAnalyser();
             /** Smaller FFT windows make the visual meter react faster to speech attacks. */
-            infoAnalyser.fftSize = 512;
-            infoAnalyser.smoothingTimeConstant = 0.12;
-            infoAudioSource =
-                infoAudioContext.createMediaStreamSource(microphoneStream);
-            infoAudioSource.connect(infoAnalyser);
-            void infoAudioContext.resume();
+            audioAnalyser.fftSize = 512;
+            audioAnalyser.smoothingTimeConstant = 0.12;
+            audioSource = audioContext.createMediaStreamSource(microphoneStream);
+            audioSource.connect(audioAnalyser);
+            void audioContext.resume();
         } catch {
             destroyAudioAnalysis();
         }
@@ -320,10 +323,10 @@
      * - RMS prevents the meter from becoming too twitchy
      */
     function updateMicrophoneLevel() {
-        if (!infoAnalyser) return;
+        if (!audioAnalyser) return;
 
-        const buffer = new Uint8Array(infoAnalyser.fftSize);
-        infoAnalyser.getByteTimeDomainData(buffer);
+        const buffer = new Uint8Array(audioAnalyser.fftSize);
+        audioAnalyser.getByteTimeDomainData(buffer);
 
         let sumSquares = 0;
         let peak = 0;
@@ -340,16 +343,16 @@
             Math.min(1, weightedLevel * MICROPHONE_LEVEL_GAIN),
         );
 
-        if (nextLevel >= infoMicrophoneLevel) {
-            infoMicrophoneLevel =
-                infoMicrophoneLevel * (1 - MICROPHONE_ATTACK_BLEND) +
+        if (nextLevel >= debug.microphoneLevel) {
+            debug.microphoneLevel =
+                debug.microphoneLevel * (1 - MICROPHONE_ATTACK_BLEND) +
                 nextLevel * MICROPHONE_ATTACK_BLEND;
             return;
         }
 
-        infoMicrophoneLevel = Math.max(
+        debug.microphoneLevel = Math.max(
             nextLevel,
-            infoMicrophoneLevel * MICROPHONE_DECAY_FACTOR,
+            debug.microphoneLevel * MICROPHONE_DECAY_FACTOR,
         );
     }
 
@@ -357,29 +360,29 @@
      * Tears down the audio analysis graph used by the microphone meter.
      */
     function destroyAudioAnalysis() {
-        if (infoAudioSource) {
+        if (audioSource) {
             try {
-                infoAudioSource.disconnect();
+                audioSource.disconnect();
             } catch {
                 // Ignore cleanup errors.
             }
-            infoAudioSource = null;
+            audioSource = null;
         }
 
-        if (infoAnalyser) {
+        if (audioAnalyser) {
             try {
-                infoAnalyser.disconnect();
+                audioAnalyser.disconnect();
             } catch {
                 // Ignore cleanup errors.
             }
-            infoAnalyser = null;
+            audioAnalyser = null;
         }
 
-        if (infoAudioContext && infoAudioContext.state !== "closed") {
-            void infoAudioContext.close();
+        if (audioContext && audioContext.state !== "closed") {
+            void audioContext.close();
         }
 
-        infoAudioContext = null;
+        audioContext = null;
     }
 
     /** Stops the slow debug overlay loop. */
@@ -397,8 +400,8 @@
             microphoneLevelLoopTimeoutId = null;
         }
 
-        infoMicrophoneLevel = 0;
-        infoMicrophoneLevelSnapshot = 0;
+        debug.microphoneLevel = 0;
+        debug.microphoneLevelSnapshot = 0;
     }
 
     /**
@@ -410,10 +413,7 @@
             performanceLoopTimeoutId = null;
         }
 
-        if (
-            performanceRenderLoopFrameId !== null &&
-            typeof window !== "undefined"
-        ) {
+        if (performanceRenderLoopFrameId !== null) {
             window.cancelAnimationFrame(performanceRenderLoopFrameId);
         }
         performanceRenderLoopFrameId = null;
@@ -424,11 +424,11 @@
         performanceFrameCallbackId = null;
         performancePresentedFrames = 0;
         performanceRenderLoopFrames = 0;
-        performanceFps = null;
-        performanceRenderFps = null;
-        performanceFrameTimeMs = null;
-        performanceTrackFrameRate = null;
-        performanceTargetFrameRate =
+        perf.fps = null;
+        perf.renderFps = null;
+        perf.frameTimeMs = null;
+        perf.trackFrameRate = null;
+        perf.targetFrameRate =
             getVideoConstraintsByQuality(selectedQuality).frameRate ?? null;
         previousPerformanceRenderLoopFrames = 0;
         previousPerformanceSampleTime = 0;
@@ -444,9 +444,9 @@
         previousPerformanceRenderedFrames = 0;
         performancePresentedFrames = 0;
         performanceRenderLoopFrames = 0;
-        performanceFps = null;
-        performanceRenderFps = null;
-        performanceFrameTimeMs = null;
+        perf.fps = null;
+        perf.renderFps = null;
+        perf.frameTimeMs = null;
     }
 
     /** Enables or disables the slow debug loop depending on the current toggle. */
@@ -568,7 +568,7 @@
         const step = () => {
             refreshDebugInfoSnapshot(false);
 
-            if (shouldSampleMicrophoneLevel() && !infoMicrophoneMuted) {
+            if (shouldSampleMicrophoneLevel() && !debug.microphoneMuted) {
                 ensureAudioAnalysis();
                 updateMicrophoneLevel();
                 microphoneLevelLoopTimeoutId = window.setTimeout(
@@ -579,7 +579,7 @@
             }
 
             destroyAudioAnalysis();
-            infoMicrophoneLevel = 0;
+            debug.microphoneLevel = 0;
             microphoneLevelLoopTimeoutId = null;
         };
 
@@ -611,7 +611,7 @@
      * both metrics because they answer different questions.
      */
     function schedulePerformanceRenderLoop() {
-        if (!showPerformance || typeof window === "undefined") {
+        if (!showPerformance) {
             return;
         }
 
@@ -650,8 +650,7 @@
                         const renderedFramesDelta =
                             renderedFrames - previousPerformanceRenderedFrames;
                         if (renderedFramesDelta >= 0) {
-                            performanceFps =
-                                (renderedFramesDelta * 1000) / elapsed;
+                            perf.fps = (renderedFramesDelta * 1000) / elapsed;
                         }
                     }
 
@@ -659,9 +658,9 @@
                         performanceRenderLoopFrames -
                         previousPerformanceRenderLoopFrames;
                     if (elapsed > 0 && renderLoopFramesDelta > 0) {
-                        performanceRenderFps =
+                        perf.renderFps =
                             (renderLoopFramesDelta * 1000) / elapsed;
-                        performanceFrameTimeMs = elapsed / renderLoopFramesDelta;
+                        perf.frameTimeMs = elapsed / renderLoopFramesDelta;
                     }
 
                     previousPerformanceSampleTime = now;
@@ -671,9 +670,9 @@
                         renderedFrames ?? previousPerformanceRenderedFrames;
                 }
             } else {
-                performanceFps = null;
-                performanceRenderFps = null;
-                performanceFrameTimeMs = null;
+                perf.fps = null;
+                perf.renderFps = null;
+                perf.frameTimeMs = null;
                 performanceRenderLoopFrames = 0;
                 previousPerformanceRenderLoopFrames = 0;
                 previousPerformanceSampleTime = 0;
@@ -887,91 +886,67 @@
         const [videoTrack] = cameraStream.getVideoTracks();
         isApplyingQuality = true;
         errorMessage = "";
-
         cameraState = "loading";
-        if (hasMicrophone) {
-            microphoneState = "loading";
-        }
+        if (hasMicrophone) microphoneState = "loading";
 
         try {
-            if (forceRestart) {
-                throw new DOMException(
-                    "Restart required",
-                    "OverconstrainedError",
-                );
-            }
-
             if (
-                !videoTrack ||
-                typeof videoTrack.applyConstraints !== "function"
+                !forceRestart &&
+                videoTrack &&
+                typeof videoTrack.applyConstraints === "function"
             ) {
-                throw new Error("applyConstraints is not supported.");
-            }
+                let constraintApplied = false;
+                let lastError: unknown = null;
 
-            let lastConstraintError: unknown = null;
-            let didApplyConstraints = false;
-
-            for (const constraints of getApplyConstraintCandidates(
-                getCurrentPreferences(),
-            )) {
-                try {
-                    await videoTrack.applyConstraints(constraints);
-                    didApplyConstraints = true;
-                    break;
-                } catch (constraintError) {
-                    lastConstraintError = constraintError;
+                for (const constraints of getApplyConstraintCandidates(
+                    getCurrentPreferences(),
+                )) {
+                    try {
+                        await videoTrack.applyConstraints(constraints);
+                        constraintApplied = true;
+                        break;
+                    } catch (err) {
+                        lastError = err;
+                    }
                 }
-            }
 
-            if (!didApplyConstraints) {
-                throw lastConstraintError;
-            }
-
-            cameraState = "ready";
-            if (hasMicrophone) {
-                microphoneState = "ready";
-            }
-            refreshOverlaySnapshots();
-        } catch (error) {
-            const shouldRestart =
-                !(error instanceof DOMException) ||
-                error.name === "OverconstrainedError" ||
-                error.name === "ConstraintNotSatisfiedError";
-
-            if (!shouldRestart) {
-                cameraState = "error";
-                if (hasMicrophone) {
-                    microphoneState = "error";
-                    errorMessage = getMediaErrorMessage("media", error);
-                } else {
-                    errorMessage = getMediaErrorMessage("camera", error);
-                }
-                return;
-            }
-
-            try {
-                if (hasMicrophone) {
-                    await restartActiveMedia({
-                        restartCamera: true,
-                        restartMicrophone: true,
-                    });
+                if (constraintApplied) {
                     cameraState = "ready";
-                    microphoneState = "ready";
+                    if (hasMicrophone) microphoneState = "ready";
                     refreshOverlaySnapshots();
                     return;
                 }
 
+                // Only fall through to restart on overconstrained errors; surface others directly
+                const isOverconstrained =
+                    !(lastError instanceof DOMException) ||
+                    lastError.name === "OverconstrainedError" ||
+                    lastError.name === "ConstraintNotSatisfiedError";
+
+                if (!isOverconstrained) {
+                    cameraState = "error";
+                    if (hasMicrophone) microphoneState = "error";
+                    errorMessage = getMediaErrorMessage(
+                        hasMicrophone ? "media" : "camera",
+                        lastError,
+                    );
+                    return;
+                }
+            }
+
+            // Full stream restart path (forceRestart or overconstrained applyConstraints)
+            try {
                 await restartActiveMedia({
                     restartCamera: true,
-                    restartMicrophone: false,
+                    restartMicrophone: hasMicrophone,
                 });
                 cameraState = "ready";
+                if (hasMicrophone) microphoneState = "ready";
                 refreshOverlaySnapshots();
             } catch (restartError) {
                 cameraStream = null;
                 cameraEnabled = false;
                 cameraState = "error";
-
                 if (hasMicrophone) {
                     microphoneStream = null;
                     microphoneEnabled = false;
@@ -992,73 +967,41 @@
         await applyVideoPreferences();
     }
 
-    /** Restarts the active streams after a camera device change. */
-    async function handleVideoDeviceChange() {
+    /**
+     * Restarts the active streams after a device change.
+     *
+     * The primary parameter identifies which device changed. If that device has no
+     * active stream the handler skips the restart and only refreshes the device list.
+     */
+    async function handleDeviceChange(primary: "camera" | "microphone") {
         persistSettings();
 
-        if (!cameraStream) {
+        const isCameraChange = primary === "camera";
+        const hasCam = Boolean(cameraStream);
+        const hasMic = Boolean(microphoneStream);
+
+        if (isCameraChange ? !hasCam : !hasMic) {
             await refreshAvailableDevices();
             return;
         }
 
-        cameraState = "loading";
-        if (microphoneStream) {
-            microphoneState = "loading";
-        }
+        if (hasCam) cameraState = "loading";
+        if (hasMic) microphoneState = "loading";
 
         try {
             await restartActiveMedia({
-                restartCamera: true,
-                restartMicrophone: Boolean(microphoneStream),
+                restartCamera: hasCam,
+                restartMicrophone: hasMic,
             });
-            cameraState = "ready";
-            if (microphoneStream) {
-                microphoneState = "ready";
-            }
+            if (hasCam) cameraState = "ready";
+            if (hasMic) microphoneState = "ready";
             refreshOverlaySnapshots();
         } catch (error) {
-            cameraState = "error";
-            if (microphoneStream) {
-                microphoneState = "error";
-                errorMessage = getMediaErrorMessage("media", error);
-            } else {
-                errorMessage = getMediaErrorMessage("camera", error);
-            }
-        }
-    }
-
-    /** Restarts the active streams after a microphone device change. */
-    async function handleAudioDeviceChange() {
-        persistSettings();
-
-        if (!microphoneStream) {
-            await refreshAvailableDevices();
-            return;
-        }
-
-        microphoneState = "loading";
-        if (cameraStream) {
-            cameraState = "loading";
-        }
-
-        try {
-            await restartActiveMedia({
-                restartCamera: Boolean(cameraStream),
-                restartMicrophone: true,
-            });
-            microphoneState = "ready";
-            if (cameraStream) {
-                cameraState = "ready";
-            }
-            refreshOverlaySnapshots();
-        } catch (error) {
-            microphoneState = "error";
-            if (cameraStream) {
-                cameraState = "error";
-                errorMessage = getMediaErrorMessage("media", error);
-            } else {
-                errorMessage = getMediaErrorMessage("microphone", error);
-            }
+            if (hasCam) cameraState = "error";
+            if (hasMic) microphoneState = "error";
+            const kind =
+                hasCam && hasMic ? "media" : hasCam ? "camera" : "microphone";
+            errorMessage = getMediaErrorMessage(kind, error);
         }
     }
 
@@ -1074,7 +1017,7 @@
     function handleStarsClick() {}
 
     onMount(async () => {
-        infoBrowser = detectBrowserVersion();
+        debug.browser = detectBrowserVersion();
         applyStoredPreferences(readCameraPreferences(localStorage));
         await handleStartAll();
         syncDebugInfoLoopState();
@@ -1098,32 +1041,15 @@
     });
 
     onDestroy(() => {
-        if (typeof document !== "undefined") {
-            document.removeEventListener(
-                "visibilitychange",
-                handlePerformanceVisibilityReset,
-            );
-        }
+        document.removeEventListener(
+            "visibilitychange",
+            handlePerformanceVisibilityReset,
+        );
+        window.removeEventListener("blur", handlePerformanceVisibilityReset);
+        window.removeEventListener("focus", handlePerformanceVisibilityReset);
+        window.removeEventListener("pagehide", handlePerformanceVisibilityReset);
 
-        if (typeof window !== "undefined") {
-            window.removeEventListener(
-                "blur",
-                handlePerformanceVisibilityReset,
-            );
-            window.removeEventListener(
-                "focus",
-                handlePerformanceVisibilityReset,
-            );
-            window.removeEventListener(
-                "pagehide",
-                handlePerformanceVisibilityReset,
-            );
-        }
-
-        if (
-            typeof navigator !== "undefined" &&
-            navigator.mediaDevices?.removeEventListener
-        ) {
+        if (navigator.mediaDevices?.removeEventListener) {
             navigator.mediaDevices.removeEventListener(
                 "devicechange",
                 handleMediaDevicesChange,
@@ -1169,32 +1095,32 @@
         onDebugInfoToggle={handleDebugInfoToggle}
         onPerformanceToggle={handlePerformanceToggle}
         onQualityChange={handleQualityChange}
-        onVideoDeviceChange={handleVideoDeviceChange}
-        onAudioDeviceChange={handleAudioDeviceChange}
+        onVideoDeviceChange={() => handleDeviceChange("camera")}
+        onAudioDeviceChange={() => handleDeviceChange("microphone")}
     />
 
     {#if showPerformance || showDebugInfo}
         <div class="overlay-stack">
             {#if showPerformance}
                 <CameraPerformanceOverlay
-                    measuredFps={performanceFps}
-                    renderFps={performanceRenderFps}
-                    frameTimeMs={performanceFrameTimeMs}
-                    resolution={performanceResolution}
-                    trackFrameRate={performanceTrackFrameRate}
-                    targetFrameRate={performanceTargetFrameRate}
+                    measuredFps={perf.fps}
+                    renderFps={perf.renderFps}
+                    frameTimeMs={perf.frameTimeMs}
+                    resolution={perf.resolution}
+                    trackFrameRate={perf.trackFrameRate}
+                    targetFrameRate={perf.targetFrameRate}
                     quality={selectedQuality}
                 />
             {/if}
 
             {#if showDebugInfo}
                 <CameraDebugOverlay
-                    browser={infoBrowser}
-                    cameraMuted={infoCameraMuted}
-                    cameraName={infoCameraName}
-                    microphoneMuted={infoMicrophoneMuted}
-                    microphoneLevel={infoMicrophoneLevelSnapshot}
-                    microphoneName={infoMicrophoneName}
+                    browser={debug.browser}
+                    cameraMuted={debug.cameraMuted}
+                    cameraName={debug.cameraName}
+                    microphoneMuted={debug.microphoneMuted}
+                    microphoneLevel={debug.microphoneLevelSnapshot}
+                    microphoneName={debug.microphoneName}
                 />
             {/if}
         </div>
@@ -1249,9 +1175,9 @@
                 class="microphone-level-indicator"
                 aria-hidden="true"
                 data-active={shouldSampleMicrophoneLevel() &&
-                    !infoMicrophoneMuted}
+                    !debug.microphoneMuted}
             >
-                {#each getMicrophoneLevelBars(infoMicrophoneLevel) as isActive, index}
+                {#each getMicrophoneLevelBars(debug.microphoneLevel) as isActive, index}
                     <span
                         class={`microphone-level-bar ${isActive ? getMicrophoneLevelBarTone(index) : ""}`}
                         class:microphone-level-bar-active={isActive}
@@ -1291,8 +1217,7 @@
         align-items: center;
     }
 
-    .action-pill,
-    .action-icon-button {
+    .action-pill {
         border: 0;
         border-radius: 999px;
         background: rgba(0, 0, 0, 0.65);
@@ -1301,9 +1226,6 @@
         font-weight: 600;
         backdrop-filter: blur(6px);
         cursor: pointer;
-    }
-
-    .action-pill {
         min-height: 48px;
         padding: 0.9rem 1.2rem;
     }
