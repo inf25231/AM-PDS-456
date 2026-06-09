@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+пimport { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -43,6 +43,12 @@ async function run() {
 
   console.log('Checking /health...');
   await request('/health');
+
+  console.log('Checking /status...');
+  const status = await request('/status');
+  if (!Array.isArray(status.rooms)) {
+    throw new Error('/status failed: rooms should be an array');
+  }
 
   console.log('Creating room...');
   await request('/rooms', {

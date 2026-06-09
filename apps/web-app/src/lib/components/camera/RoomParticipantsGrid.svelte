@@ -14,47 +14,15 @@
 
   type Props = {
     roomName: string | null;
-    roomAgeSec?: number | null;
     connectionState: RoomConnectionState;
     participants: ParticipantTile[];
   };
 
   let {
     roomName = null,
-    roomAgeSec = null,
     connectionState = 'disconnected',
     participants = []
   }: Props = $props();
-
-  let clockNowMs = $state(Date.now());
-  let startedAtMs = $state<number | null>(null);
-
-  $effect(() => {
-    if (connectionState !== 'connected' || roomAgeSec == null) {
-      startedAtMs = null;
-      clockNowMs = Date.now();
-      return;
-    }
-
-    startedAtMs = Date.now() - Math.max(0, roomAgeSec) * 1000;
-    clockNowMs = Date.now();
-
-    const timer = window.setInterval(() => {
-      clockNowMs = Date.now();
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  });
-
-  function formatRoomDuration(totalSeconds: number) {
-    const safeSeconds = Math.max(0, Math.floor(totalSeconds));
-    const hours = Math.floor(safeSeconds / 3600);
-    const minutes = Math.floor((safeSeconds % 3600) / 60);
-    const seconds = safeSeconds % 60;
-
-    const mmss = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    return hours > 0 ? `${hours}:${mmss}` : mmss;
-  }
 
   const tileCount = $derived(Math.max(1, participants.length));
   const gridColumns = $derived(Math.ceil(Math.sqrt(tileCount)));
@@ -92,7 +60,7 @@
         <div class="room-session-title">Room: {roomName}</div>
         <div class="room-session-subtitle">
           {connectionState === 'connected'
-            ? `${participants.length} participant(s)${startedAtMs !== null ? ` · call ${formatRoomDuration((clockNowMs - startedAtMs) / 1000)}` : ''}`
+            ? `${participants.length} participant(s)`
             : connectionState === 'connecting'
               ? 'Connecting...'
               : connectionState === 'error'

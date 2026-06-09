@@ -137,7 +137,6 @@
     let cameraEffects = $state(createDefaultCameraEffectsState());
     let livekitRoom: Room | null = null;
     let activeRoomName = $state<string | null>(null);
-    let activeRoomAgeSec = $state<number | null>(null);
     let roomConnectionState = $state<
         "disconnected" | "connecting" | "connected" | "error"
     >("disconnected");
@@ -839,7 +838,7 @@
     /**
      * Tracks the browser render loop through requestAnimationFrame.
      *
-     * This is intentionally separate from video presented frames. The route exposes
+     * This is intentionally separate from video-presented frames. The route exposes
      * both metrics because they answer different questions.
      */
     function schedulePerformanceRenderLoop() {
@@ -856,7 +855,7 @@
     /**
      * Starts the rolling performance measurements.
      *
-     * The route publishes values on a coarse interval instead of every animation frame
+     * The route publishes values on a coarse interval instead of every animation frame,
      * so the debug UI stays readable and does not create unnecessary reactive churn.
      */
     function startPerformanceLoop() {
@@ -1089,7 +1088,7 @@
      * Restarts whichever streams are currently required after device or quality changes.
      *
      * The function remembers whether camera and microphone were soft-enabled before the
-     * restart and restores those flags afterwards.
+     * restart and restores those flags afterward.
      */
     async function restartActiveMedia(options: {
         restartCamera: boolean;
@@ -1772,7 +1771,7 @@
     function shouldUseCompositedVideoTrack() {
         if (roomConnectionState === "connected") {
             // Keep a single stable video source in-room to avoid publish source swaps
-            // when toggling effects (e.g. FunnyMask), which can freeze some clients.
+            // when toggling effects (e.g., FunnyMask), which can freeze some clients.
             return true;
         }
 
@@ -1953,7 +1952,7 @@
         );
 
         // These events can fire very frequently and cause visible tile/video rebind flicker.
-        // Keep room stable first; we can reintroduce throttled updates later.
+        // Keep the room stable first; we can reintroduce throttled updates later.
         room.on(RoomEvent.TrackMuted, () => {
             if (!isActiveSession()) return;
             rebuildParticipantTiles();
@@ -2014,7 +2013,6 @@
         ]);
         livekitRoom = null;
         activeRoomName = null;
-        activeRoomAgeSec = null;
         roomConnectionState = "disconnected";
         roomConnectionError = "";
         participantStreams.clear();
@@ -2070,7 +2068,6 @@
             registerRoomEvents(room, activeSession);
             await room.connect(joinResponse.livekitUrl, joinResponse.token);
             activeRoomName = joinResponse.room;
-            activeRoomAgeSec = joinResponse.roomAgeSec ?? null;
             roomConnectionState = "connected";
             lastParticipantCount = 0;
             localStorage.setItem(ROOM_NAME_STORAGE_KEY, joinResponse.room);
@@ -2103,7 +2100,6 @@
             }
             livekitRoom = null;
             activeRoomName = null;
-            activeRoomAgeSec = null;
             showRoomError(getMediaErrorMessage("media", error));
         }
     }
@@ -2339,7 +2335,6 @@
 
     <RoomParticipantsGrid
         roomName={activeRoomName}
-        roomAgeSec={activeRoomAgeSec}
         connectionState={roomConnectionState}
         participants={participantTiles}
     />
