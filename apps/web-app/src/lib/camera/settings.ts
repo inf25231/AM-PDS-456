@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
     videoQuality: "camera-video-quality",
     cameraDeviceId: "camera-video-device-id",
     microphoneDeviceId: "camera-audio-device-id",
+    publishMaskOnly: "camera-publish-mask-only",
 } as const;
 
 export const VIDEO_QUALITY_OPTIONS: VideoQuality[] = ["360p", "480p", "720p", "1080p"];
@@ -23,6 +24,7 @@ export type CameraPreferences = {
     selectedQuality: VideoQuality;
     selectedVideoDeviceId: string;
     selectedAudioDeviceId: string;
+    publishMaskOnly: boolean;
 };
 
 /**
@@ -76,6 +78,7 @@ export function readCameraPreferences(storage: Storage): CameraPreferences {
         storage.getItem(STORAGE_KEYS.showDebugInfo) ?? storage.getItem(STORAGE_KEYS.legacyDebugMode);
     const performanceValue = storage.getItem(STORAGE_KEYS.showPerformance);
     const qualityValue = storage.getItem(STORAGE_KEYS.videoQuality);
+    const publishMaskOnlyValue = storage.getItem(STORAGE_KEYS.publishMaskOnly);
 
     return {
         showDebugInfo: debugValue === "true",
@@ -83,6 +86,7 @@ export function readCameraPreferences(storage: Storage): CameraPreferences {
         selectedQuality: isVideoQuality(qualityValue) ? qualityValue : "480p",
         selectedVideoDeviceId: storage.getItem(STORAGE_KEYS.cameraDeviceId) ?? "",
         selectedAudioDeviceId: storage.getItem(STORAGE_KEYS.microphoneDeviceId) ?? "",
+        publishMaskOnly: publishMaskOnlyValue === "true",
     };
 }
 
@@ -95,6 +99,7 @@ export function persistCameraPreferences(storage: Storage, preferences: CameraPr
     storage.setItem(STORAGE_KEYS.videoQuality, preferences.selectedQuality);
     storage.setItem(STORAGE_KEYS.cameraDeviceId, preferences.selectedVideoDeviceId);
     storage.setItem(STORAGE_KEYS.microphoneDeviceId, preferences.selectedAudioDeviceId);
+    storage.setItem(STORAGE_KEYS.publishMaskOnly, String(preferences.publishMaskOnly));
 }
 
 /**

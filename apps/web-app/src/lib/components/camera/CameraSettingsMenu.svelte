@@ -90,7 +90,7 @@
                 <span class="settings-hint">Changes quality</span>
             </span>
 
-            <div class="select-wrap">
+            <span class="select-wrap">
                 <select
                     bind:value={selectedQuality}
                     onchange={onQualityChange}
@@ -100,7 +100,7 @@
                         <option value={quality}>{label}</option>
                     {/each}
                 </select>
-            </div>
+            </span>
         </label>
 
         <label class="settings-row settings-row-select">
@@ -109,7 +109,7 @@
                 <span class="settings-hint">Specific camera source</span>
             </span>
 
-            <div class="select-wrap">
+            <span class="select-wrap">
                 <select
                     bind:value={selectedVideoDeviceId}
                     onchange={onVideoDeviceChange}
@@ -124,7 +124,7 @@
                         <option value={device.value}>{device.label}</option>
                     {/each}
                 </select>
-            </div>
+            </span>
         </label>
 
         <label class="settings-row settings-row-select">
@@ -133,7 +133,7 @@
                 <span class="settings-hint">Specific input source</span>
             </span>
 
-            <div class="select-wrap">
+            <span class="select-wrap">
                 <select
                     bind:value={selectedAudioDeviceId}
                     onchange={onAudioDeviceChange}
@@ -148,7 +148,7 @@
                         <option value={device.value}>{device.label}</option>
                     {/each}
                 </select>
-            </div>
+            </span>
         </label>
     </div>
 </MediaPopover>

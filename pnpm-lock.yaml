@@ -28,12 +28,18 @@ importers:
 
   apps/web-app:
     dependencies:
+      '@mediapipe/tasks-vision':
+        specifier: 0.10.0
+        version: 0.10.0
       camera-core:
         specifier: workspace:*
         version: link:../../packages/camera-core
       livekit-client:
         specifier: ^2.19.0
         version: 2.19.0(@types/dom-mediacapture-record@1.0.22)
+      three:
+        specifier: ^0.179.1
+        version: 0.179.1
       vercel:
         specifier: ^54.0.0
         version: 54.4.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
@@ -318,6 +324,9 @@ packages:
     resolution: {integrity: sha512-uwPAhccfFJlsfCxMYTwOdVfOz3xqyj8xYL3zJj8f0pb30tLohnnFPhLuqp4/qoEz8sNxe4SESZedcBojRefIzg==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@mediapipe/tasks-vision@0.10.0':
+    resolution: {integrity: sha512-l7Sqdw9EgO758tLrt+jDqqKnYKjeOFgzC9MRcE4qZnh/XG/o7JBacEF4cAzes+2wsElRCVoVGf8ETllIqgBzWA==}
 
   '@napi-rs/wasm-runtime@1.1.4':
     resolution: {integrity: sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow==}
@@ -2157,6 +2166,9 @@ packages:
   text-decoder@1.2.7:
     resolution: {integrity: sha512-vlLytXkeP4xvEq2otHeJfSQIRyWxo/oZGEbXrtEEF9Hnmrdly59sUbzZ/QgyWuLYHctCHxFF4tRQZNQ9k60ExQ==}
 
+  three@0.179.1:
+    resolution: {integrity: sha512-5y/elSIQbrvKOISxpwXCR4sQqHtGiOI+MKLc3SsBdDXA2hz3Mdp3X59aUp8DyybMa34aeBwbFTpdoLJaUDEWSw==}
+
   throttleit@2.1.0:
     resolution: {integrity: sha512-nt6AMGKW1p/70DF/hGBdJB57B8Tspmbp5gfJ8ilhLnt7kkr2ye7hzD6NVG8GGErk2HWF34igrL2CXmNIkzKqKw==}
     engines: {node: '>=18'}
@@ -2562,6 +2574,8 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+
+  '@mediapipe/tasks-vision@0.10.0': {}
 
   '@napi-rs/wasm-runtime@1.1.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
@@ -4472,6 +4486,8 @@ snapshots:
       b4a: 1.8.1
     transitivePeerDependencies:
       - react-native-b4a
+
+  three@0.179.1: {}
 
   throttleit@2.1.0: {}
 
