@@ -16,7 +16,15 @@ const metrics = createServerMetrics();
 const roomRegistry = createRoomRegistry();
 const livekit = createLivekitAdmin(config);
 
-app.use(cors({ origin: config.allowedOrigin }));
+const allowedOrigins = config.allowedOrigin === '*'
+  ? '*'
+  : config.allowedOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 function parseRoomPayload(input = {}) {
