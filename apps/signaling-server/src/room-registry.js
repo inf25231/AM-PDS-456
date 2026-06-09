@@ -11,6 +11,7 @@ export function createRoomRegistry() {
       const updated = {
         ...existing,
         ...patch,
+        createdAt: existing.createdAt,
         updatedAt: nowIso()
       };
       roomByName.set(name, updated);
@@ -23,7 +24,7 @@ export function createRoomRegistry() {
       metadata: patch.metadata || {},
       participants: patch.participants || 0,
       emptySince: patch.emptySince || null,
-      createdAt: nowIso(),
+      createdAt: patch.createdAt || nowIso(),
       updatedAt: nowIso()
     };
 
@@ -70,4 +71,5 @@ export function createRoomRegistry() {
     size
   };
 }
+
 

@@ -4,6 +4,8 @@ export type JoinRoomResponse = {
   username: string;
   token: string;
   livekitUrl: string;
+  roomCreatedAt?: string | null;
+  roomAgeSec?: number | null;
 };
 
 /**
@@ -31,7 +33,7 @@ export async function createRoom(roomName: string, displayName?: string) {
     body: JSON.stringify({ name: roomName, displayName: displayName || roomName })
   });
 
-  return parseJson<{ ok: boolean; room: { name: string; displayName: string } }>(response);
+  return parseJson<{ ok: boolean; room: { name: string; displayName: string; createdAt?: string | null; ageSec?: number | null } }>(response);
 }
 
 export async function joinRoom(roomName: string, username: string) {
@@ -49,6 +51,7 @@ export async function getServerStatus() {
   return parseJson<{
     ok: boolean;
     roomsTracked: number;
+    rooms: Array<{ name: string; displayName: string; createdAt?: string | null; ageSec?: number | null; participants?: number }>
     metrics: {
       uptimeSec: number;
       cpuPercent: number;
@@ -56,5 +59,6 @@ export async function getServerStatus() {
     };
   }>(response);
 }
+
 
 

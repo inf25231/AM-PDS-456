@@ -58,7 +58,7 @@ export function startFaceTracking(
     let animationFrameId = 0;
     let lastVideoTime = -1;
     let lastInferTime = 0;
-    const targetFps = Math.max(1, options.targetFps ?? 24);
+    const targetFps = Math.max(1, options.targetFps ?? 12);
     const minIntervalMs = 1000 / targetFps;
     const suspendWhenHidden = options.suspendWhenHidden ?? true;
 
