@@ -24,7 +24,10 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
+		"camera-core": "workspace:*",
+		"three": "^0.179.1",
+		"livekit-client": "^2.19.0",
 		"vercel": "^54.0.0",
-		"camera-core": "workspace:*"
+		"@mediapipe/tasks-vision": "0.10.0"
 	}
 }

@@ -19,7 +19,6 @@ Thumbs.db
 !.env.example
 !.env.test
 .npmrc
-.vscode/
 
 # Vite
 vite.config.js.timestamp-*
@@ -35,3 +34,10 @@ pnpm-debug.log*
 
 # WSL Trash
 *.Identifier
+
+# IDE
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+.vscode/

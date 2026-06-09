@@ -7,38 +7,46 @@
 	type Props = {
 		children?: Snippet;
 		panelId?: string;
+		open?: boolean;
+		showToggle?: boolean;
 	};
 
 	let {
 		children,
 		panelId = "camera-popover-panel",
+		open,
+		showToggle = true,
 	}: Props = $props();
 
 	let isOpen = $state(false);
+	const panelOpen = $derived(open ?? isOpen);
 
 	function handleToggle() {
 		isOpen = !isOpen;
 	}
 </script>
 
-<div class="popover-anchor">
+<div class="popover-anchor" data-inline={!showToggle}>
+	{#if showToggle}
 	<button
 		class="popover-toggle"
-		aria-label={isOpen ? "Close menu" : "Open menu"}
-		aria-expanded={isOpen}
+		aria-label={panelOpen ? "Close menu" : "Open menu"}
+		aria-expanded={panelOpen}
 		aria-controls={panelId}
 		onclick={handleToggle}
 	>
-		<span class:icon-layer={true} class:icon-layer-visible={!isOpen}>
+		<span class:icon-layer={true} class:icon-layer-visible={!panelOpen}>
 			<img class="popover-icon" src={triggerOpenIcon} alt="Open menu" />
 		</span>
 
-		<span class:icon-layer={true} class:icon-layer-visible={isOpen}>
+		<span class:icon-layer={true} class:icon-layer-visible={panelOpen}>
 			<img class="popover-icon" src={triggerCloseIcon} alt="Close menu" />
 		</span>
 	</button>
+	{/if}
 
-	{#if isOpen}
+	{#if panelOpen}
+		{#if showToggle}
 		<div
 			id={panelId}
 			class="popover-panel"
@@ -50,6 +58,13 @@
 				<div class="popover-placeholder">Popover menu</div>
 			{/if}
 		</div>
+		{:else}
+			{#if children}
+				{@render children()}
+			{:else}
+				<div class="popover-placeholder">Popover menu</div>
+			{/if}
+		{/if}
 	{/if}
 </div>
 
@@ -63,6 +78,11 @@
 		align-items: flex-end;
 		gap: 0.7rem;
 		z-index: 30;
+	}
+
+	.popover-anchor[data-inline="true"] {
+		position: static;
+		display: contents;
 	}
 
 	.popover-toggle {

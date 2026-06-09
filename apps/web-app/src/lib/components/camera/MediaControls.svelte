@@ -24,6 +24,7 @@
         left: 50%;
         bottom: 1.5rem;
         transform: translateX(-50%);
+        z-index: 20;
         display: flex;
         gap: 0.75rem;
     }

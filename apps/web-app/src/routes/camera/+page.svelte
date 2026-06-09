@@ -20,13 +20,24 @@
     import micOff from "$lib/images/mic-off.svg";
     import loading from "$lib/images/loading.svg";
     import starsIcon from "$lib/images/stars.svg";
-    import CameraDebugOverlay from "$lib/components/camera/CameraDebugOverlay.svelte";
-    import CameraPerformanceOverlay from "$lib/components/camera/CameraPerformanceOverlay.svelte";
+    import CameraOverlaysStack from "$lib/components/camera/CameraOverlaysStack.svelte";
+    import CameraEffectsPanel from "$lib/components/camera/CameraEffectsPanel.svelte";
+    import RoomParticipantsGrid from "$lib/components/camera/RoomParticipantsGrid.svelte";
     import CameraSettingsMenu from "$lib/components/camera/CameraSettingsMenu.svelte";
     import MediaControls from "$lib/components/camera/MediaControls.svelte";
     import MediaToggleButton from "$lib/components/camera/MediaToggleButton.svelte";
+    import MicrophoneLevelIndicator from "$lib/components/camera/MicrophoneLevelIndicator.svelte";
     import MediaPlaceholder from "$lib/components/camera/MediaPlaceholder.svelte";
+    import Banner from "$lib/components/camera/Banner.svelte";
     import ErrorBanner from "$lib/components/camera/ErrorBanner.svelte";
+    import { createRoom, joinRoom } from "$lib/calls/rooms-api";
+    import {
+        createDefaultCameraEffectsState,
+        normalizeEffectsState,
+        updateEffectAsset,
+    } from "$lib/camera/effects";
+    import { drawCameraEffectsOverlay } from "$lib/camera/effects-renderer";
+    import { ThreeMaskRenderer } from "$lib/camera/three-mask-renderer";
     import {
         detectBrowserVersion,
         enumerateMediaDeviceOptions,
@@ -61,8 +72,28 @@
         type CameraState,
         type VideoQuality,
     } from "camera-core";
+    import {
+        startFaceTracking,
+        type FaceLandmarkerResult,
+    } from "$lib/camera/tracking";
+    import {
+        ConnectionQuality,
+        Room,
+        RoomEvent,
+        Track,
+        type LocalTrackPublication,
+        type Participant,
+        type RemoteParticipant,
+        type RemoteTrack,
+        type RemoteTrackPublication,
+    } from "livekit-client";
 
     let videoEl: HTMLVideoElement;
+    let effectsCanvasEl: HTMLCanvasElement;
+    let effects3dCanvasEl: HTMLCanvasElement;
+    let stopFaceTracking: (() => void) | null = null;
+    let threeMaskRenderer: ThreeMaskRenderer | null = null;
+    let latestFaceResult: FaceLandmarkerResult | null = null;
     let cameraStream = $state<MediaStream | null>(null);
     let microphoneStream = $state<MediaStream | null>(null);
     let cameraState = $state<CameraState>("idle");
@@ -70,6 +101,7 @@
     let cameraEnabled = $state(false);
     let microphoneEnabled = $state(false);
     let errorMessage = $state("");
+    let infoMessage = $state("");
     let showDebugInfo = $state(false);
     let showPerformance = $state(false);
     let selectedQuality = $state<VideoQuality>("480p");
@@ -99,10 +131,58 @@
     let infoAudioContext: AudioContext | null = null;
     let infoAudioSource: MediaStreamAudioSourceNode | null = null;
     let infoAnalyser: AnalyserNode | null = null;
+    let showEffectsPanel = $state(false);
+    let publishMaskOnly = $state(false);
+    let cameraEffects = $state(createDefaultCameraEffectsState());
+    let livekitRoom: Room | null = null;
+    let activeRoomName = $state<string | null>(null);
+    let roomConnectionState = $state<
+        "disconnected" | "connecting" | "connected" | "error"
+    >("disconnected");
+    let roomConnectionError = $state("");
+    let lastParticipantCount = $state(0);
+    let participantTiles = $state<
+        {
+            id: string;
+            name: string;
+            isLocal: boolean;
+            isSpeaking: boolean;
+            connectionQuality: string;
+            cameraOn: boolean;
+            microphoneOn: boolean;
+            stream: MediaStream | null;
+        }[]
+    >([]);
 
-    const DEBUG_INFO_SAMPLE_INTERVAL_MS = 250;
-    const MICROPHONE_LEVEL_SAMPLE_INTERVAL_MS = 48;
-    const PERFORMANCE_SAMPLE_INTERVAL_MS = 500;
+    const participantStreams = new Map<string, MediaStream>();
+    let localPreviewStream: MediaStream | null = null;
+    let compositionCanvasEl: HTMLCanvasElement | null = null;
+    let compositionFrameId: number | null = null;
+    let compositionTrack: MediaStreamTrack | null = null;
+    let publishedVideoPublication: LocalTrackPublication | null = null;
+    let publishedAudioPublication: LocalTrackPublication | null = null;
+    let publishedVideoTrack: MediaStreamTrack | null = null;
+    let publishedAudioTrack: MediaStreamTrack | null = null;
+    const ROOM_NAME_STORAGE_KEY = "amphi.room.name";
+    const USER_NAME_STORAGE_KEY = "amphi.user.name";
+    let infoMessageTimeoutId: number | null = null;
+    let roomErrorTimeoutId: number | null = null;
+    let effectsResizeObserver: ResizeObserver | null = null;
+    let publishSyncChain: Promise<void> = Promise.resolve();
+    let roomSessionId = 0;
+    let compositionBackgroundImage: HTMLImageElement | null = null;
+    let compositionBackgroundUrl: string | null = null;
+    let compositionLastDrawAt = 0;
+
+    // Tunable performance constants.
+    const DEBUG_INFO_SAMPLE_INTERVAL_MS = 1500;
+    const PERFORMANCE_SAMPLE_INTERVAL_MS = 1500;
+    const MICROPHONE_LEVEL_SAMPLE_INTERVAL_MS = 32;
+    const COMPOSITION_FPS_CONNECTED_DESKTOP = 24;
+    const COMPOSITION_FPS_CONNECTED_MOBILE = 21;
+    const COMPOSITION_FPS_IDLE = 8;
+    const FACE_TRACKING_FPS_DESKTOP = 16;
+    const FACE_TRACKING_FPS_MOBILE = 16;
     const MICROPHONE_LEVEL_GAIN = 4.4;
     const MICROPHONE_DECAY_FACTOR = 0.4;
     const MICROPHONE_ATTACK_BLEND = 0.96;
@@ -129,32 +209,6 @@
         );
     }
 
-    function getMicrophoneLevelBars(level: number) {
-        const barCount = 8;
-        const activeBars = Math.max(
-            0,
-            Math.min(barCount, Math.round(level * barCount)),
-        );
-
-        return Array.from(
-            { length: barCount },
-            (_, index) => index < activeBars,
-        );
-    }
-
-    function getMicrophoneLevelBarTone(index: number, barCount = 8) {
-        const ratio = (index + 1) / barCount;
-
-        if (ratio >= 0.875) {
-            return "bar-red";
-        }
-
-        if (ratio >= 0.625) {
-            return "bar-orange";
-        }
-
-        return "bar-green";
-    }
 
     function getCurrentPreferences(): CameraPreferences {
         return {
@@ -163,6 +217,7 @@
             selectedQuality,
             selectedVideoDeviceId,
             selectedAudioDeviceId,
+            publishMaskOnly,
         };
     }
 
@@ -175,6 +230,7 @@
         selectedQuality = preferences.selectedQuality;
         selectedVideoDeviceId = preferences.selectedVideoDeviceId;
         selectedAudioDeviceId = preferences.selectedAudioDeviceId;
+        publishMaskOnly = preferences.publishMaskOnly;
     }
 
     /**
@@ -483,6 +539,151 @@
         stopPerformanceLoop();
     }
 
+    function syncEffectsCanvasSize() {
+        if (!effectsCanvasEl || !videoEl) {
+            return;
+        }
+
+        const width = Math.max(1, Math.round(videoEl.clientWidth));
+        const height = Math.max(1, Math.round(videoEl.clientHeight));
+
+        if (effectsCanvasEl.width !== width || effectsCanvasEl.height !== height) {
+            effectsCanvasEl.width = width;
+            effectsCanvasEl.height = height;
+        }
+
+        if (effects3dCanvasEl) {
+            if (
+                effects3dCanvasEl.width !== width ||
+                effects3dCanvasEl.height !== height
+            ) {
+                effects3dCanvasEl.width = width;
+                effects3dCanvasEl.height = height;
+            }
+        }
+
+        if (threeMaskRenderer) {
+            threeMaskRenderer.resize(width, height);
+        }
+    }
+
+    function clearEffectsOverlay() {
+        const ctx = effectsCanvasEl?.getContext("2d");
+        if (!ctx || !effectsCanvasEl) {
+            return;
+        }
+        ctx.clearRect(0, 0, effectsCanvasEl.width, effectsCanvasEl.height);
+        threeMaskRenderer?.clear();
+    }
+
+    function renderEffectsOverlay(result = latestFaceResult) {
+        if (!effectsCanvasEl || !videoEl) {
+            return;
+        }
+
+        syncEffectsCanvasSize();
+
+        const ctx = effectsCanvasEl.getContext("2d");
+        if (!ctx) {
+            return;
+        }
+
+        drawCameraEffectsOverlay(
+            ctx,
+            videoEl,
+            result,
+            normalizeEffectsState(cameraEffects),
+            { drawBackground: roomConnectionState !== "connected" },
+        );
+
+        threeMaskRenderer?.render(
+            result,
+            videoEl,
+            normalizeEffectsState(cameraEffects),
+        );
+    }
+
+    async function sync3dMaskModel() {
+        if (!threeMaskRenderer) {
+            return;
+        }
+
+        if (cameraEffects.mode !== "mask-3d") {
+            await threeMaskRenderer.setModelUrl(null);
+            return;
+        }
+
+        await threeMaskRenderer.setModelUrl(cameraEffects.mask3d.url);
+    }
+
+    function stopEffectsTracking() {
+        if (stopFaceTracking) {
+            stopFaceTracking();
+            stopFaceTracking = null;
+        }
+        latestFaceResult = null;
+        renderEffectsOverlay(null);
+    }
+
+    function syncEffectsTracking() {
+        const shouldTrackFace =
+            cameraEffects.mode !== "off" || cameraEffects.showLandmarksDebug;
+
+        if (
+            !videoEl ||
+            !cameraEnabled ||
+            cameraState !== "ready" ||
+            !shouldTrackFace
+        ) {
+            stopEffectsTracking();
+            return;
+        }
+
+        if (stopFaceTracking) {
+            return;
+        }
+
+        const isMobileViewport =
+            typeof window !== "undefined" &&
+            window.matchMedia("(max-width: 900px)").matches;
+        const trackingFps = isMobileViewport
+            ? FACE_TRACKING_FPS_MOBILE
+            : FACE_TRACKING_FPS_DESKTOP;
+
+        stopFaceTracking = startFaceTracking(
+            videoEl,
+            (result) => {
+                latestFaceResult = result;
+                renderEffectsOverlay(result);
+            },
+            {
+                targetFps: trackingFps,
+                suspendWhenHidden: true,
+            },
+        );
+    }
+
+    function handleUploadFunnyMask(file: File | null) {
+        cameraEffects.funnyMask = updateEffectAsset(cameraEffects.funnyMask, file);
+        if (file) {
+            cameraEffects.mode = "funny-mask";
+        }
+        renderEffectsOverlay();
+    }
+
+    async function handleUploadMask3d(file: File | null) {
+        cameraEffects.mask3d = updateEffectAsset(cameraEffects.mask3d, file);
+        if (file) {
+            cameraEffects.mode = "mask-3d";
+        }
+        try {
+            await sync3dMaskModel();
+        } catch (error) {
+            errorMessage = getMediaErrorMessage("camera", error);
+        }
+        renderEffectsOverlay();
+    }
+
     /**
      * Soft-enables or soft-disables a track without recreating the stream.
      */
@@ -524,6 +725,10 @@
             });
         }
         refreshOverlaySnapshots();
+        syncEffectsTracking();
+        if (!enabled) {
+            renderEffectsOverlay(null);
+        }
         return true;
     }
 
@@ -661,7 +866,9 @@
                     if (elapsed > 0 && renderLoopFramesDelta > 0) {
                         performanceRenderFps =
                             (renderLoopFramesDelta * 1000) / elapsed;
-                        performanceFrameTimeMs = elapsed / renderLoopFramesDelta;
+                        performanceFrameTimeMs = performanceRenderFps
+                            ? 1000 / performanceRenderFps
+                            : null;
                     }
 
                     previousPerformanceSampleTime = now;
@@ -710,6 +917,7 @@
             cameraState = "ready";
             await refreshAvailableDevices();
             refreshOverlaySnapshots();
+            syncEffectsTracking();
         } catch (error) {
             cameraState = "error";
             errorMessage = getMediaErrorMessage("camera", error);
@@ -736,6 +944,7 @@
             microphoneState = "ready";
             await refreshAvailableDevices();
             refreshOverlaySnapshots();
+            syncEffectsTracking();
         } catch (error) {
             cameraState = "error";
             microphoneState = "error";
@@ -751,11 +960,16 @@
         cameraEnabled = false;
 
         cameraState = "idle";
+        stopEffectsTracking();
     }
 
     /** User-facing camera toggle handler. */
     async function handleToggle() {
         if (cameraStream && setCameraStreamEnabled(!cameraEnabled)) {
+            if (roomConnectionState === "connected") {
+                void queueSyncPublishedTracks();
+                rebuildParticipantTiles();
+            }
             return;
         }
 
@@ -800,6 +1014,10 @@
             microphoneStream &&
             setMicrophoneStreamEnabled(!microphoneEnabled)
         ) {
+            if (roomConnectionState === "connected") {
+                void queueSyncPublishedTracks();
+                rebuildParticipantTiles();
+            }
             return;
         }
 
@@ -816,6 +1034,28 @@
     function handlePerformanceToggle() {
         persistSettings();
         syncPerformanceLoopState();
+    }
+
+    function handlePublishMaskOnlyToggle() {
+        persistSettings();
+        renderEffectsOverlay(null);
+        if (roomConnectionState === "connected") {
+            void queueSyncPublishedTracks();
+        }
+    }
+
+    function resetMaskOnlyOutsideRoom() {
+        if (activeRoomName || roomConnectionState === "connected") {
+            return;
+        }
+
+        if (!publishMaskOnly) {
+            return;
+        }
+
+        publishMaskOnly = false;
+        persistSettings();
+        renderEffectsOverlay(null);
     }
 
     /**
@@ -932,6 +1172,7 @@
                 microphoneState = "ready";
             }
             refreshOverlaySnapshots();
+            syncEffectsTracking();
         } catch (error) {
             const shouldRestart =
                 !(error instanceof DOMException) ||
@@ -958,6 +1199,7 @@
                     cameraState = "ready";
                     microphoneState = "ready";
                     refreshOverlaySnapshots();
+                    syncEffectsTracking();
                     return;
                 }
 
@@ -967,6 +1209,7 @@
                 });
                 cameraState = "ready";
                 refreshOverlaySnapshots();
+                syncEffectsTracking();
             } catch (restartError) {
                 cameraStream = null;
                 cameraEnabled = false;
@@ -1012,6 +1255,7 @@
                 restartMicrophone: Boolean(microphoneStream),
             });
             cameraState = "ready";
+            syncEffectsTracking();
             if (microphoneStream) {
                 microphoneState = "ready";
             }
@@ -1049,6 +1293,7 @@
             microphoneState = "ready";
             if (cameraStream) {
                 cameraState = "ready";
+                syncEffectsTracking();
             }
             refreshOverlaySnapshots();
         } catch (error) {
@@ -1067,19 +1312,892 @@
         await refreshAvailableDevices();
     }
 
-    function handleCreateClick() {}
+    function handleEffectsResize() {
+        syncEffectsCanvasSize();
+        renderEffectsOverlay();
+    }
 
-    function handleJoinClick() {}
+    function showInfoBanner(message: string, durationMs = 2200) {
+        if (infoMessageTimeoutId !== null) {
+            clearTimeout(infoMessageTimeoutId);
+            infoMessageTimeoutId = null;
+        }
 
-    function handleStarsClick() {}
+        infoMessage = message;
+        infoMessageTimeoutId = window.setTimeout(() => {
+            infoMessage = "";
+            infoMessageTimeoutId = null;
+        }, durationMs);
+    }
+
+    function showRoomError(message: string, durationMs = 3600) {
+        if (roomErrorTimeoutId !== null) {
+            clearTimeout(roomErrorTimeoutId);
+            roomErrorTimeoutId = null;
+        }
+
+        roomConnectionState = "error";
+        roomConnectionError = message;
+
+        roomErrorTimeoutId = window.setTimeout(() => {
+            if (roomConnectionState === "error" && roomConnectionError === message) {
+                roomConnectionState = "disconnected";
+                roomConnectionError = "";
+            }
+            roomErrorTimeoutId = null;
+        }, durationMs);
+    }
+
+    function drawCoverVideoFrame(
+        ctx: CanvasRenderingContext2D,
+        source: CanvasImageSource,
+        sourceWidth: number,
+        sourceHeight: number,
+        targetWidth: number,
+        targetHeight: number,
+    ) {
+        if (!sourceWidth || !sourceHeight || !targetWidth || !targetHeight) {
+            return;
+        }
+
+        const scale = Math.max(targetWidth / sourceWidth, targetHeight / sourceHeight);
+        const drawWidth = sourceWidth * scale;
+        const drawHeight = sourceHeight * scale;
+        const drawX = (targetWidth - drawWidth) / 2;
+        const drawY = (targetHeight - drawHeight) / 2;
+        ctx.drawImage(source, drawX, drawY, drawWidth, drawHeight);
+    }
+
+    function ensureCompositionCanvas() {
+        if (!compositionCanvasEl) {
+            compositionCanvasEl = document.createElement("canvas");
+        }
+        return compositionCanvasEl;
+    }
+
+    function stopCompositionLoop() {
+        if (compositionFrameId !== null) {
+            window.cancelAnimationFrame(compositionFrameId);
+            compositionFrameId = null;
+        }
+
+        if (compositionTrack) {
+            compositionTrack.stop();
+            compositionTrack = null;
+        }
+
+        localPreviewStream = null;
+    }
+
+    function updateCompositionBackgroundImage(url: string | null) {
+        if (!url) {
+            compositionBackgroundImage = null;
+            compositionBackgroundUrl = null;
+            return;
+        }
+
+        if (compositionBackgroundUrl === url && compositionBackgroundImage?.complete) {
+            return;
+        }
+
+        const image = new Image();
+        image.src = url;
+        compositionBackgroundUrl = url;
+        image.onload = () => {
+            if (compositionBackgroundUrl === url) {
+                compositionBackgroundImage = image;
+            }
+        };
+    }
+
+    function drawBackgroundFrame(
+        context: CanvasRenderingContext2D,
+        width: number,
+        height: number,
+    ) {
+        const background = cameraEffects.background;
+        updateCompositionBackgroundImage(background.url);
+
+        if (!compositionBackgroundImage || background.opacity <= 0) {
+            return;
+        }
+
+        const imageWidth = Math.max(1, compositionBackgroundImage.naturalWidth || width);
+        const imageHeight = Math.max(1, compositionBackgroundImage.naturalHeight || height);
+        const coverScale = Math.max(width / imageWidth, height / imageHeight);
+        const drawWidth = imageWidth * coverScale * background.scale;
+        const drawHeight = imageHeight * coverScale * background.scale;
+        const drawX = (width - drawWidth) / 2 + width * background.offsetX;
+        const drawY = (height - drawHeight) / 2 + height * background.offsetY;
+
+        context.save();
+        context.globalAlpha = background.opacity;
+        context.drawImage(compositionBackgroundImage, drawX, drawY, drawWidth, drawHeight);
+        context.restore();
+    }
+
+    function startCompositionLoop() {
+        if (!videoEl || !cameraStream) {
+            stopCompositionLoop();
+            return;
+        }
+
+        if (compositionFrameId !== null && compositionTrack) {
+            return;
+        }
+
+        const canvas = ensureCompositionCanvas();
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) {
+            return;
+        }
+
+        const stream = canvas.captureStream(COMPOSITION_FPS_CONNECTED_DESKTOP);
+        const [track] = stream.getVideoTracks();
+        if (track) {
+            compositionTrack = track;
+        }
+
+        compositionLastDrawAt = 0;
+
+        const step = () => {
+            const now = performance.now();
+            const isMobileViewport =
+                typeof window !== "undefined" &&
+                window.matchMedia("(max-width: 900px)").matches;
+            const targetFps =
+                roomConnectionState === "connected"
+                    ? isMobileViewport
+                        ? COMPOSITION_FPS_CONNECTED_MOBILE
+                        : COMPOSITION_FPS_CONNECTED_DESKTOP
+                    : COMPOSITION_FPS_IDLE;
+            const minFrameInterval = 1000 / targetFps;
+            if (compositionLastDrawAt && now - compositionLastDrawAt < minFrameInterval) {
+                compositionFrameId = window.requestAnimationFrame(step);
+                return;
+            }
+            compositionLastDrawAt = now;
+
+            const width = Math.max(1, videoEl.videoWidth || 1280);
+            const height = Math.max(1, videoEl.videoHeight || 720);
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+            }
+
+            context.clearRect(0, 0, width, height);
+
+            if (!publishMaskOnly && cameraEnabled) {
+                drawBackgroundFrame(context, width, height);
+                drawCoverVideoFrame(
+                    context,
+                    videoEl,
+                    videoEl.videoWidth,
+                    videoEl.videoHeight,
+                    width,
+                    height,
+                );
+            } else {
+                context.fillStyle = "#020617";
+                context.fillRect(0, 0, width, height);
+                drawBackgroundFrame(context, width, height);
+            }
+
+            if (effects3dCanvasEl) {
+                context.drawImage(effects3dCanvasEl, 0, 0, width, height);
+            }
+            if (effectsCanvasEl) {
+                context.drawImage(effectsCanvasEl, 0, 0, width, height);
+            }
+
+            compositionFrameId = window.requestAnimationFrame(step);
+        };
+
+        compositionFrameId = window.requestAnimationFrame(step);
+    }
+
+    function handleUploadBackground(file: File | null) {
+        cameraEffects.background = updateEffectAsset(cameraEffects.background, file);
+        renderEffectsOverlay();
+
+        // Repaint once the uploaded image is actually decoded to avoid a black frame.
+        if (cameraEffects.background.url) {
+            const image = new Image();
+            image.onload = () => {
+                renderEffectsOverlay(null);
+            };
+            image.src = cameraEffects.background.url;
+        }
+    }
+
+    function getConnectionQualityLabel(quality: ConnectionQuality | undefined) {
+        if (quality === undefined) {
+            return "unknown";
+        }
+
+        const qualityLabel =
+            typeof quality === "number"
+                ? String((ConnectionQuality as unknown as Record<number, string>)[quality] || "unknown")
+                : String(quality);
+
+        return qualityLabel.toLowerCase();
+    }
+
+    function getTrackMediaStreamTrack(track: unknown): MediaStreamTrack | null {
+        if (!track || typeof track !== "object") {
+            return null;
+        }
+
+        const maybeTrack = (track as { mediaStreamTrack?: MediaStreamTrack })
+            .mediaStreamTrack;
+        return maybeTrack instanceof MediaStreamTrack ? maybeTrack : null;
+    }
+
+    function getOrCreateParticipantStream(identity: string) {
+        const existing = participantStreams.get(identity);
+        if (existing) {
+            return existing;
+        }
+
+        const stream = new MediaStream();
+        participantStreams.set(identity, stream);
+        return stream;
+    }
+
+    function buildLocalPreviewStream() {
+        if (!compositionTrack && !microphoneStream) {
+            localPreviewStream = null;
+            return null;
+        }
+
+        const stream = localPreviewStream ?? new MediaStream();
+        const videoTrack = compositionTrack ?? cameraStream?.getVideoTracks()[0] ?? null;
+        const audioTrack = microphoneStream?.getAudioTracks()[0] ?? null;
+
+        const currentVideoTrack = stream.getVideoTracks()[0] ?? null;
+        const currentAudioTrack = stream.getAudioTracks()[0] ?? null;
+
+        if (!videoTrack && currentVideoTrack) {
+            stream.removeTrack(currentVideoTrack);
+        }
+        if (
+            videoTrack &&
+            (!currentVideoTrack || currentVideoTrack.id !== videoTrack.id)
+        ) {
+            if (currentVideoTrack) {
+                stream.removeTrack(currentVideoTrack);
+            }
+            stream.addTrack(videoTrack);
+        }
+
+        if (!audioTrack && currentAudioTrack) {
+            stream.removeTrack(currentAudioTrack);
+        }
+        if (
+            audioTrack &&
+            (!currentAudioTrack || currentAudioTrack.id !== audioTrack.id)
+        ) {
+            if (currentAudioTrack) {
+                stream.removeTrack(currentAudioTrack);
+            }
+            stream.addTrack(audioTrack);
+        }
+
+        localPreviewStream = stream;
+        return stream;
+    }
+
+    function rebuildParticipantTiles() {
+        if (!livekitRoom || roomConnectionState !== "connected") {
+            participantTiles = [];
+            return;
+        }
+
+        const localParticipant = livekitRoom.localParticipant;
+        const tiles = [
+            {
+                id: localParticipant.identity || "local",
+                name: localParticipant.name || localParticipant.identity || "You",
+                isLocal: true,
+                isSpeaking: localParticipant.isSpeaking,
+                connectionQuality: getConnectionQualityLabel(
+                    localParticipant.connectionQuality,
+                ),
+                cameraOn: cameraEnabled,
+                microphoneOn: microphoneEnabled,
+                stream: buildLocalPreviewStream(),
+            },
+        ];
+
+        for (const participant of livekitRoom.remoteParticipants.values()) {
+            const identity = participant.identity;
+            const hasRemoteCamera = [...participant.trackPublications.values()].some(
+                (publication) =>
+                    publication.kind === "video" &&
+                    publication.source === Track.Source.Camera &&
+                    Boolean(publication.track) &&
+                    !publication.isMuted,
+            );
+            const hasRemoteMic = [...participant.trackPublications.values()].some(
+                (publication) =>
+                    publication.kind === "audio" &&
+                    publication.source === Track.Source.Microphone &&
+                    Boolean(publication.track) &&
+                    !publication.isMuted,
+            );
+            tiles.push({
+                id: identity,
+                name: participant.name || identity,
+                isLocal: false,
+                isSpeaking: participant.isSpeaking,
+                connectionQuality: getConnectionQualityLabel(
+                    participant.connectionQuality,
+                ),
+                cameraOn: hasRemoteCamera,
+                microphoneOn: hasRemoteMic,
+                stream: participantStreams.get(identity) ?? null,
+            });
+        }
+
+        if (roomConnectionState === "connected" && lastParticipantCount !== 0) {
+            if (tiles.length > lastParticipantCount) {
+                showInfoBanner("A participant joined the room.");
+            } else if (tiles.length < lastParticipantCount) {
+                showInfoBanner("A participant left the room.");
+            }
+        }
+        lastParticipantCount = tiles.length;
+        participantTiles = tiles;
+    }
+
+    function addTrackToParticipantStream(participant: Participant | RemoteParticipant, track: unknown) {
+        const mediaTrack = getTrackMediaStreamTrack(track);
+        if (!mediaTrack) {
+            return;
+        }
+
+        const stream = getOrCreateParticipantStream(participant.identity);
+        const existing = stream
+            .getTracks()
+            .find((item) => item.id === mediaTrack.id || item.kind === mediaTrack.kind);
+        if (existing) {
+            stream.removeTrack(existing);
+        }
+
+        stream.addTrack(mediaTrack);
+        rebuildParticipantTiles();
+    }
+
+    function removeTrackFromParticipantStream(participant: Participant | RemoteParticipant, track: unknown) {
+        const mediaTrack = getTrackMediaStreamTrack(track);
+        if (!mediaTrack) {
+            return;
+        }
+
+        const stream = participantStreams.get(participant.identity);
+        if (!stream) {
+            return;
+        }
+
+        stream.getTracks().forEach((item) => {
+            if (item.id === mediaTrack.id || item.kind === mediaTrack.kind) {
+                stream.removeTrack(item);
+            }
+        });
+
+        if (stream.getTracks().length === 0) {
+            participantStreams.delete(participant.identity);
+        }
+
+        rebuildParticipantTiles();
+    }
+
+    function queueSyncPublishedTracks() {
+        const activeSession = roomSessionId;
+        publishSyncChain = publishSyncChain
+            .then(async () => {
+                await syncPublishedTracks(activeSession);
+            })
+            .catch((error) => {
+                roomConnectionError = getMediaErrorMessage("media", error);
+            });
+        return publishSyncChain;
+    }
+
+    function findPublishedTrackById(kind: "video" | "audio", trackId: string) {
+        if (!livekitRoom) {
+            return null;
+        }
+
+        for (const publication of livekitRoom.localParticipant.trackPublications.values()) {
+            const mediaTrack = publication.track?.mediaStreamTrack;
+            if (publication.kind === kind && mediaTrack && mediaTrack.id === trackId) {
+                return publication as LocalTrackPublication;
+            }
+        }
+
+        return null;
+    }
+
+    function shouldUseCompositedVideoTrack() {
+        if (roomConnectionState === "connected") {
+            // Keep a single stable video source in-room to avoid publish source swaps
+            // when toggling effects (e.g. FunnyMask), which can freeze some clients.
+            return true;
+        }
+
+        return (
+            cameraEffects.mode !== "off" ||
+            cameraEffects.showLandmarksDebug ||
+            publishMaskOnly ||
+            Boolean(cameraEffects.background.url && cameraEffects.background.opacity > 0)
+        );
+    }
+
+    async function syncPublishedTracks(sessionId = roomSessionId) {
+        if (!livekitRoom || roomConnectionState !== "connected" || sessionId !== roomSessionId) {
+            return;
+        }
+
+        const useCompositedTrack = shouldUseCompositedVideoTrack();
+        if (useCompositedTrack && !compositionTrack && cameraStream) {
+            startCompositionLoop();
+        }
+        if (!useCompositedTrack) {
+            stopCompositionLoop();
+        }
+
+        const nextVideoTrack = useCompositedTrack
+            ? compositionTrack
+            : (cameraStream?.getVideoTracks()[0] ?? null);
+        const nextAudioTrack = microphoneStream?.getAudioTracks()[0] ?? null;
+
+        if (publishedVideoPublication && !publishedVideoPublication.track) {
+            publishedVideoPublication = null;
+            publishedVideoTrack = null;
+        }
+        if (publishedAudioPublication && !publishedAudioPublication.track) {
+            publishedAudioPublication = null;
+            publishedAudioTrack = null;
+        }
+
+        // Unpublish only when the track source truly changed.
+        if (publishedVideoPublication && nextVideoTrack && publishedVideoTrack !== nextVideoTrack) {
+            try {
+                if (publishedVideoPublication.track) {
+                    await livekitRoom.localParticipant.unpublishTrack(publishedVideoPublication.track);
+                }
+            } catch {
+                // ignore if already gone
+            }
+            publishedVideoPublication = null;
+            publishedVideoTrack = null;
+        }
+
+        // Replace stale audio source only when the source track itself changes.
+        if (publishedAudioPublication && nextAudioTrack && publishedAudioTrack !== nextAudioTrack) {
+            try {
+                if (publishedAudioPublication.track) {
+                    await livekitRoom.localParticipant.unpublishTrack(publishedAudioPublication.track);
+                }
+            } catch {
+                // ignore if already gone
+            }
+            publishedAudioPublication = null;
+            publishedAudioTrack = null;
+        }
+
+        if (!nextVideoTrack && publishedVideoPublication) {
+            try {
+                if (publishedVideoPublication.track) {
+                    await livekitRoom.localParticipant.unpublishTrack(publishedVideoPublication.track);
+                }
+            } catch {
+                // ignore
+            }
+            publishedVideoPublication = null;
+            publishedVideoTrack = null;
+        }
+
+        if (!nextAudioTrack && publishedAudioPublication) {
+            try {
+                if (publishedAudioPublication.track) {
+                    await livekitRoom.localParticipant.unpublishTrack(publishedAudioPublication.track);
+                }
+            } catch {
+                // ignore
+            }
+            publishedAudioPublication = null;
+            publishedAudioTrack = null;
+        }
+
+        if (nextVideoTrack && !publishedVideoPublication) {
+            publishedVideoPublication = findPublishedTrackById("video", nextVideoTrack.id);
+            publishedVideoTrack = publishedVideoPublication
+                ? nextVideoTrack
+                : publishedVideoTrack;
+        }
+
+        if (nextAudioTrack && !publishedAudioPublication) {
+            publishedAudioPublication = findPublishedTrackById("audio", nextAudioTrack.id);
+            publishedAudioTrack = publishedAudioPublication
+                ? nextAudioTrack
+                : publishedAudioTrack;
+        }
+
+        // Publish current video source once.
+        if (nextVideoTrack && !publishedVideoPublication) {
+            const pub = await livekitRoom.localParticipant.publishTrack(nextVideoTrack, {
+                source: Track.Source.Camera,
+            });
+            publishedVideoPublication = pub;
+            publishedVideoTrack = nextVideoTrack;
+        }
+
+        // Publish current audio source once.
+        if (nextAudioTrack && !publishedAudioPublication) {
+            const pub = await livekitRoom.localParticipant.publishTrack(nextAudioTrack, {
+                source: Track.Source.Microphone,
+            });
+            publishedAudioPublication = pub;
+            publishedAudioTrack = nextAudioTrack;
+        }
+
+        if (publishedVideoPublication) {
+            if (cameraEnabled && publishedVideoPublication.isMuted) {
+                await publishedVideoPublication.unmute();
+            }
+            if (!cameraEnabled && !publishedVideoPublication.isMuted) {
+                await publishedVideoPublication.mute();
+            }
+        }
+
+        if (publishedAudioPublication) {
+            if (microphoneEnabled && publishedAudioPublication.isMuted) {
+                await publishedAudioPublication.unmute();
+            }
+            if (!microphoneEnabled && !publishedAudioPublication.isMuted) {
+                await publishedAudioPublication.mute();
+            }
+        }
+
+        rebuildParticipantTiles();
+    }
+
+    function registerRoomEvents(room: Room, sessionId: number) {
+        const isActiveSession = () => sessionId === roomSessionId && room === livekitRoom;
+
+        room.on(RoomEvent.ParticipantConnected, () => {
+            if (!isActiveSession()) return;
+            rebuildParticipantTiles();
+        });
+
+        room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+            if (!isActiveSession()) return;
+            participantStreams.delete(participant.identity);
+            rebuildParticipantTiles();
+        });
+
+        room.on(
+            RoomEvent.TrackSubscribed,
+            (
+                track: RemoteTrack,
+                _publication: RemoteTrackPublication,
+                participant: RemoteParticipant,
+            ) => {
+                if (!isActiveSession()) return;
+                addTrackToParticipantStream(participant, track);
+            },
+        );
+
+        room.on(
+            RoomEvent.TrackUnsubscribed,
+            (
+                track: RemoteTrack,
+                _publication: RemoteTrackPublication,
+                participant: RemoteParticipant,
+            ) => {
+                if (!isActiveSession()) return;
+                removeTrackFromParticipantStream(participant, track);
+            },
+        );
+
+        // These events can fire very frequently and cause visible tile/video rebind flicker.
+        // Keep room stable first; we can reintroduce throttled updates later.
+        room.on(RoomEvent.TrackMuted, () => {
+            if (!isActiveSession()) return;
+            rebuildParticipantTiles();
+        });
+        room.on(RoomEvent.TrackUnmuted, () => {
+            if (!isActiveSession()) return;
+            rebuildParticipantTiles();
+        });
+        room.on(RoomEvent.LocalTrackPublished, () => {
+            if (!isActiveSession()) return;
+            rebuildParticipantTiles();
+        });
+        room.on(RoomEvent.LocalTrackUnpublished, () => {
+            if (!isActiveSession()) return;
+            rebuildParticipantTiles();
+        });
+        room.on(RoomEvent.TrackPublished, () => {
+            if (!isActiveSession()) return;
+            rebuildParticipantTiles();
+        });
+        room.on(RoomEvent.TrackUnpublished, () => {
+            if (!isActiveSession()) return;
+            rebuildParticipantTiles();
+        });
+
+        room.on(RoomEvent.Disconnected, () => {
+            if (sessionId !== roomSessionId) return;
+            roomConnectionState = "disconnected";
+            showInfoBanner("You left the room.");
+            participantStreams.clear();
+            participantTiles = [];
+            lastParticipantCount = 0;
+            localPreviewStream = null;
+            publishedVideoPublication = null;
+            publishedAudioPublication = null;
+            publishedVideoTrack = null;
+            publishedAudioTrack = null;
+        });
+    }
+
+    async function leaveCurrentRoom(options: { restartMedia?: boolean } = {}) {
+        const { restartMedia = false } = options;
+        roomSessionId += 1;
+        if (!livekitRoom) {
+            activeRoomName = null;
+            roomConnectionState = "disconnected";
+            roomConnectionError = "";
+            participantTiles = [];
+            participantStreams.clear();
+            publishSyncChain = Promise.resolve();
+            resetMaskOnlyOutsideRoom();
+            return;
+        }
+
+        await Promise.race([
+            Promise.resolve(livekitRoom.disconnect()),
+            new Promise((resolve) => window.setTimeout(resolve, 1500)),
+        ]);
+        livekitRoom = null;
+        activeRoomName = null;
+        roomConnectionState = "disconnected";
+        roomConnectionError = "";
+        participantStreams.clear();
+        participantTiles = [];
+        lastParticipantCount = 0;
+        localPreviewStream = null;
+        publishedVideoPublication = null;
+        publishedAudioPublication = null;
+        publishedVideoTrack = null;
+        publishedAudioTrack = null;
+        publishSyncChain = Promise.resolve();
+        resetMaskOnlyOutsideRoom();
+        syncEffectsCanvasSize();
+        renderEffectsOverlay();
+
+        if (restartMedia) {
+            // Optional hard restart for explicit recovery actions.
+            try {
+                await restartActiveMedia({
+                    restartCamera: Boolean(cameraStream),
+                    restartMicrophone: Boolean(microphoneStream),
+                });
+                refreshOverlaySnapshots();
+            } catch {
+                // Keep current streams if restart fails; user can still toggle manually.
+            }
+        }
+    }
+
+    function handleLeaveClick() {
+        void leaveCurrentRoom({ restartMedia: false });
+    }
+
+    async function connectToRoom(roomName: string, username: string) {
+        roomSessionId += 1;
+        const activeSession = roomSessionId;
+        let room: Room | null = null;
+        roomConnectionError = "";
+        roomConnectionState = "connecting";
+
+        try {
+            if (livekitRoom) {
+                await leaveCurrentRoom({ restartMedia: false });
+            }
+
+            const joinResponse = await joinRoom(roomName, username);
+            room = new Room({
+                adaptiveStream: true,
+                dynacast: true,
+            });
+
+            livekitRoom = room;
+            registerRoomEvents(room, activeSession);
+            await room.connect(joinResponse.livekitUrl, joinResponse.token);
+            activeRoomName = joinResponse.room;
+            roomConnectionState = "connected";
+            lastParticipantCount = 0;
+            localStorage.setItem(ROOM_NAME_STORAGE_KEY, joinResponse.room);
+            localStorage.setItem(USER_NAME_STORAGE_KEY, username);
+
+            // Seed already-subscribed tracks for participants who joined before us.
+            for (const participant of room.remoteParticipants.values()) {
+                for (const pub of participant.trackPublications.values()) {
+                    if (pub.isSubscribed && pub.track) {
+                        addTrackToParticipantStream(
+                            participant,
+                            pub.track,
+                        );
+                    }
+                }
+            }
+
+            await queueSyncPublishedTracks();
+            rebuildParticipantTiles();
+            showInfoBanner(`Connected to room ${joinResponse.room}.`);
+        } catch (error) {
+            try {
+                await room?.disconnect();
+            } catch {
+                // Ignore cleanup failures after a failed join attempt.
+            }
+            livekitRoom = null;
+            activeRoomName = null;
+            showRoomError(getMediaErrorMessage("media", error));
+        }
+    }
+
+    async function ensureMediaReadyForCall() {
+        if (!cameraStream && !microphoneStream) {
+            await handleStartAll();
+            return;
+        }
+
+        if (!cameraStream) {
+            await handleStart();
+        }
+
+        if (!microphoneStream) {
+            await handleMicStart();
+        }
+
+        const videoTrack = cameraStream?.getVideoTracks()[0] ?? null;
+        const audioTrack = microphoneStream?.getAudioTracks()[0] ?? null;
+        const shouldRestartCameraTrack = Boolean(
+            cameraStream && (!videoTrack || videoTrack.readyState === "ended"),
+        );
+        const shouldRestartAudioTrack = Boolean(
+            microphoneStream && (!audioTrack || audioTrack.readyState === "ended"),
+        );
+
+        if (shouldRestartCameraTrack || shouldRestartAudioTrack) {
+            await restartActiveMedia({
+                restartCamera: shouldRestartCameraTrack,
+                restartMicrophone: shouldRestartAudioTrack,
+            });
+        }
+    }
+
+    function promptRoomName() {
+        const previousRoomName = localStorage.getItem(ROOM_NAME_STORAGE_KEY) || "";
+        return window.prompt("Room name", previousRoomName || "amphi-room")?.trim() || "";
+    }
+
+    function promptUsername() {
+        const previousUsername = localStorage.getItem(USER_NAME_STORAGE_KEY) || "";
+        return window.prompt("Your name", previousUsername || "guest")?.trim() || "";
+    }
+
+    async function handleCreateClick() {
+        const requestedRoomName = promptRoomName();
+        const username = promptUsername();
+        if (!requestedRoomName || !username) {
+            return;
+        }
+
+        try {
+            await ensureMediaReadyForCall();
+            const createdRoom = await createRoom(requestedRoomName, requestedRoomName);
+            await connectToRoom(createdRoom.room.name, username);
+        } catch (error) {
+            roomConnectionState = "error";
+            roomConnectionError = getMediaErrorMessage("media", error);
+        }
+    }
+
+    async function handleJoinClick() {
+        const roomName = promptRoomName();
+        const username = promptUsername();
+        if (!roomName || !username) {
+            return;
+        }
+
+        try {
+            await ensureMediaReadyForCall();
+            await connectToRoom(roomName, username);
+        } catch (error) {
+            roomConnectionState = "error";
+            roomConnectionError = getMediaErrorMessage("media", error);
+        }
+    }
+
+    function handleStarsClick() {
+        showEffectsPanel = !showEffectsPanel;
+        renderEffectsOverlay();
+    }
+
+    $effect(() => {
+        normalizeEffectsState(cameraEffects);
+        renderEffectsOverlay();
+        syncEffectsTracking();
+        void sync3dMaskModel();
+    });
+
+    $effect(() => {
+        cameraStream;
+        microphoneStream;
+        cameraEnabled;
+        microphoneEnabled;
+        publishMaskOnly;
+        roomConnectionState;
+        cameraEffects.mode;
+        cameraEffects.showLandmarksDebug;
+        cameraEffects.background.url;
+        cameraEffects.background.opacity;
+
+        if (roomConnectionState !== "connected") {
+            stopCompositionLoop();
+        }
+
+        if (roomConnectionState === "connected") {
+            void queueSyncPublishedTracks();
+            rebuildParticipantTiles();
+        }
+    });
 
     onMount(async () => {
         infoBrowser = detectBrowserVersion();
         applyStoredPreferences(readCameraPreferences(localStorage));
+        resetMaskOnlyOutsideRoom();
         await handleStartAll();
         syncDebugInfoLoopState();
         syncMicrophoneLevelLoopState();
         syncPerformanceLoopState();
+        if (effects3dCanvasEl) {
+            threeMaskRenderer = new ThreeMaskRenderer(effects3dCanvasEl);
+        }
+        syncEffectsCanvasSize();
+        try {
+            await sync3dMaskModel();
+        } catch {
+            // Model may not be present yet.
+        }
+        syncEffectsTracking();
+        renderEffectsOverlay();
 
         document.addEventListener(
             "visibilitychange",
@@ -1088,6 +2206,19 @@
         window.addEventListener("blur", handlePerformanceVisibilityReset);
         window.addEventListener("focus", handlePerformanceVisibilityReset);
         window.addEventListener("pagehide", handlePerformanceVisibilityReset);
+        window.addEventListener("resize", handleEffectsResize);
+        if (typeof ResizeObserver !== "undefined") {
+            effectsResizeObserver = new ResizeObserver(() => {
+                syncEffectsCanvasSize();
+                renderEffectsOverlay();
+            });
+            if (videoEl) {
+                effectsResizeObserver.observe(videoEl);
+            }
+            if (effectsCanvasEl) {
+                effectsResizeObserver.observe(effectsCanvasEl);
+            }
+        }
 
         if (navigator.mediaDevices?.addEventListener) {
             navigator.mediaDevices.addEventListener(
@@ -1098,6 +2229,7 @@
     });
 
     onDestroy(() => {
+        void leaveCurrentRoom();
         if (typeof document !== "undefined") {
             document.removeEventListener(
                 "visibilitychange",
@@ -1118,6 +2250,9 @@
                 "pagehide",
                 handlePerformanceVisibilityReset,
             );
+            window.removeEventListener("resize", handleEffectsResize);
+            effectsResizeObserver?.disconnect();
+            effectsResizeObserver = null;
         }
 
         if (
@@ -1133,6 +2268,21 @@
         stopDebugInfoLoop();
         stopMicrophoneLevelLoop();
         stopPerformanceLoop();
+        stopCompositionLoop();
+        stopEffectsTracking();
+        cameraEffects.funnyMask = updateEffectAsset(cameraEffects.funnyMask, null);
+        cameraEffects.mask3d = updateEffectAsset(cameraEffects.mask3d, null);
+        cameraEffects.background = updateEffectAsset(cameraEffects.background, null);
+        threeMaskRenderer?.dispose();
+        threeMaskRenderer = null;
+        if (infoMessageTimeoutId !== null) {
+            clearTimeout(infoMessageTimeoutId);
+            infoMessageTimeoutId = null;
+        }
+        if (roomErrorTimeoutId !== null) {
+            clearTimeout(roomErrorTimeoutId);
+            roomErrorTimeoutId = null;
+        }
         destroyAudioAnalysis();
         handleStop();
         handleMicStop();
@@ -1143,17 +2293,24 @@
     <title>Camera</title>
 </svelte:head>
 
-<div class="camera-view">
+<div class:camera-view={true} class:in-room={roomConnectionState === "connected"} class:mask-only-preview={publishMaskOnly && roomConnectionState !== "connected"}>
     <video bind:this={videoEl} autoplay playsinline muted></video>
+    <canvas bind:this={effects3dCanvasEl} class="effects-3d-overlay"></canvas>
+    <canvas bind:this={effectsCanvasEl} class="effects-overlay"></canvas>
 
-    <div class="corner-actions top-right-actions" aria-label="Session actions">
-        <button class="action-pill" type="button" onclick={handleCreateClick}
-            >Create</button
-        >
-        <button class="action-pill" type="button" onclick={handleJoinClick}
-            >Join</button
-        >
-    </div>
+    <RoomParticipantsGrid
+        roomName={activeRoomName}
+        connectionState={roomConnectionState}
+        connectionError={roomConnectionError}
+        participants={participantTiles}
+    />
+
+    {#if roomConnectionState !== "connected" && roomConnectionState !== "connecting"}
+        <div class="corner-actions top-right-actions" aria-label="Session actions">
+            <button class="action-pill" type="button" onclick={handleCreateClick}>Create</button>
+            <button class="action-pill" type="button" onclick={handleJoinClick}>Join</button>
+        </div>
+    {/if}
 
     <CameraSettingsMenu
         bind:showDebugInfo
@@ -1173,34 +2330,36 @@
         onAudioDeviceChange={handleAudioDeviceChange}
     />
 
-    {#if showPerformance || showDebugInfo}
-        <div class="overlay-stack">
-            {#if showPerformance}
-                <CameraPerformanceOverlay
-                    measuredFps={performanceFps}
-                    renderFps={performanceRenderFps}
-                    frameTimeMs={performanceFrameTimeMs}
-                    resolution={performanceResolution}
-                    trackFrameRate={performanceTrackFrameRate}
-                    targetFrameRate={performanceTargetFrameRate}
-                    quality={selectedQuality}
-                />
-            {/if}
+    <CameraOverlaysStack
+        {showPerformance}
+        {showDebugInfo}
+        {performanceFps}
+        performanceRenderFps={performanceRenderFps}
+        performanceFrameTimeMs={performanceFrameTimeMs}
+        performanceResolution={performanceResolution}
+        performanceTrackFrameRate={performanceTrackFrameRate}
+        performanceTargetFrameRate={performanceTargetFrameRate}
+        selectedQuality={selectedQuality}
+        infoBrowser={infoBrowser}
+        infoCameraMuted={infoCameraMuted}
+        infoCameraName={infoCameraName}
+        infoMicrophoneMuted={infoMicrophoneMuted}
+        infoMicrophoneLevelSnapshot={infoMicrophoneLevelSnapshot}
+        infoMicrophoneName={infoMicrophoneName}
+    />
 
-            {#if showDebugInfo}
-                <CameraDebugOverlay
-                    browser={infoBrowser}
-                    cameraMuted={infoCameraMuted}
-                    cameraName={infoCameraName}
-                    microphoneMuted={infoMicrophoneMuted}
-                    microphoneLevel={infoMicrophoneLevelSnapshot}
-                    microphoneName={infoMicrophoneName}
-                />
-            {/if}
-        </div>
-    {/if}
+    <CameraEffectsPanel
+        open={showEffectsPanel}
+        bind:effects={cameraEffects}
+        bind:publishMaskOnly
+        onClose={handleStarsClick}
+        onPublishMaskOnlyToggle={handlePublishMaskOnlyToggle}
+        onUploadFunnyMask={handleUploadFunnyMask}
+        onUploadMask3d={handleUploadMask3d}
+        onUploadBackground={handleUploadBackground}
+    />
 
-    {#if cameraState !== "ready" || !cameraEnabled}
+    {#if (cameraState !== "ready" || !cameraEnabled) && !activeRoomName}
         <MediaPlaceholder
             loading={cameraState === "loading"}
             loadingIcon={loading}
@@ -1210,13 +2369,21 @@
         />
     {/if}
 
-    {#if cameraState === "error" || microphoneState === "error"}
-        <ErrorBanner message={errorMessage} />
+    {#if cameraState === "error" || microphoneState === "error" || roomConnectionError}
+        <ErrorBanner message={roomConnectionError || errorMessage} />
     {/if}
 
+    <Banner message={infoMessage} />
+
     <MediaControls>
+        {#if roomConnectionState === "connected"}
+            <button class="control-leave-button" type="button" onclick={handleLeaveClick}
+                >Leave</button
+            >
+        {/if}
+
         <MediaToggleButton
-            active={false}
+            active={showEffectsPanel}
             activeIcon={starsIcon}
             inactiveIcon={starsIcon}
             activeAlt="Stars action"
@@ -1245,20 +2412,10 @@
                 onToggle={handleMicToggle}
             />
 
-            <div
-                class="microphone-level-indicator"
-                aria-hidden="true"
-                data-active={shouldSampleMicrophoneLevel() &&
-                    !infoMicrophoneMuted}
-            >
-                {#each getMicrophoneLevelBars(infoMicrophoneLevel) as isActive, index}
-                    <span
-                        class={`microphone-level-bar ${isActive ? getMicrophoneLevelBarTone(index) : ""}`}
-                        class:microphone-level-bar-active={isActive}
-                        style={`height: ${0.4 + index * 0.12}rem;`}
-                    ></span>
-                {/each}
-            </div>
+            <MicrophoneLevelIndicator
+                level={infoMicrophoneLevel}
+                active={shouldSampleMicrophoneLevel() && !infoMicrophoneMuted}
+            />
         </div>
     </MediaControls>
 </div>
@@ -1266,16 +2423,32 @@
 <style>
     @import "$lib/styles/camera-page.css";
 
-    .overlay-stack {
+    .effects-3d-overlay {
         position: absolute;
-        top: 1rem;
-        left: 1rem;
-        z-index: 5;
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 3;
         pointer-events: none;
-        max-width: calc(100vw - 2rem);
+    }
+
+    .effects-overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 4;
+        pointer-events: none;
+    }
+
+    .camera-view.in-room video,
+    .camera-view.in-room .effects-3d-overlay,
+    .camera-view.in-room .effects-overlay {
+        opacity: 0;
+    }
+
+    .camera-view.mask-only-preview video {
+        opacity: 0;
     }
 
     .corner-actions {
@@ -1291,8 +2464,7 @@
         align-items: center;
     }
 
-    .action-pill,
-    .action-icon-button {
+    .action-pill {
         border: 0;
         border-radius: 999px;
         background: rgba(0, 0, 0, 0.65);
@@ -1308,66 +2480,30 @@
         padding: 0.9rem 1.2rem;
     }
 
+    .action-pill:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+
     .microphone-control {
         display: flex;
         align-items: center;
         gap: 0.6rem;
     }
 
-    .microphone-level-indicator {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: 0.16rem;
-        min-width: 3rem;
-        height: 1.5rem;
-        padding: 0 0.1rem;
-    }
-
-    .microphone-level-bar {
-        width: 0.22rem;
+    .control-leave-button {
+        border: 0;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.22);
-        opacity: 0.28;
-        transition:
-            opacity 140ms ease,
-            background-color 140ms ease,
-            transform 140ms ease;
-    }
-
-    .microphone-level-bar-active {
-        opacity: 1;
-        transform: translateY(-0.02rem);
-    }
-
-    .microphone-level-bar-active.bar-green {
-        background: #7cff7c;
-        box-shadow: 0 0 0.35rem rgba(124, 255, 124, 0.35);
-    }
-
-    .microphone-level-bar-active.bar-orange {
-        background: #ffb347;
-        box-shadow: 0 0 0.35rem rgba(255, 179, 71, 0.35);
-    }
-
-    .microphone-level-bar-active.bar-red {
-        background: #ff5b5b;
-        box-shadow: 0 0 0.35rem rgba(255, 91, 91, 0.35);
-    }
-
-    .microphone-level-indicator[data-active="false"]
-        .microphone-level-bar-active,
-    .microphone-level-indicator[data-active="false"] .microphone-level-bar {
-        background: rgba(255, 255, 255, 0.22);
-        opacity: 0.28;
+        background: rgba(220, 38, 38, 0.92);
+        color: white;
+        min-height: 48px;
+        padding: 0.7rem 1rem;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
     }
 
     @media (max-width: 640px) {
-        .overlay-stack {
-            top: 0.75rem;
-            left: 0.75rem;
-            max-width: calc(100vw - 1.5rem);
-        }
-
         .top-right-actions {
             top: 0.75rem;
             right: 4.25rem;
@@ -1383,8 +2519,9 @@
             gap: 0.45rem;
         }
 
-        .microphone-level-indicator {
-            min-width: 2.6rem;
+        .control-leave-button {
+            min-height: 44px;
+            padding: 0.65rem 0.9rem;
         }
     }
 </style>
