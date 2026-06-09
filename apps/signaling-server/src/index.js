@@ -70,6 +70,40 @@ function isRoomMissingError(error) {
   );
 }
 
+function parseTimestamp(value) {
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
+function serializeRoom(room) {
+  const createdAtMs = parseTimestamp(room.createdAt);
+  const nowMs = Date.now();
+  return {
+    ...room,
+    ageMs: createdAtMs ? Math.max(0, nowMs - createdAtMs) : null,
+    ageSec: createdAtMs ? Math.max(0, Math.floor((nowMs - createdAtMs) / 1000)) : null
+  };
+}
+
+function buildUniqueUsername(requestedUsername, participants = []) {
+  const existingNames = new Set(
+    participants.map((participant) =>
+      String(participant.identity || participant.name || '').trim().toLowerCase()
+    )
+  );
+
+  const base = String(requestedUsername || '').trim() || 'guest';
+  let candidate = base;
+  let suffix = 2;
+
+  while (existingNames.has(candidate.toLowerCase())) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+}
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true, timestamp: new Date().toISOString() });
 });
@@ -78,6 +112,7 @@ app.get('/status', (_req, res) => {
   res.json({
     ok: true,
     roomsTracked: roomRegistry.size(),
+    rooms: roomRegistry.list().map(serializeRoom),
     metrics: metrics.getSnapshot()
   });
 });
@@ -89,8 +124,11 @@ app.get('/status/connection-quality', async (_req, res, next) => {
 
     for (const room of rooms) {
       const participants = await livekit.listParticipants(room.name);
+      const roomInfo = serializeRoom(room);
       qualityByRoom.push({
         room: room.name,
+        createdAt: roomInfo.createdAt,
+        ageSec: roomInfo.ageSec,
         participants: participants.map((participant) => ({
           identity: participant.identity,
           connectionQuality: participant.connectionQuality
@@ -113,7 +151,7 @@ app.get('/rooms', async (_req, res, next) => {
     await syncAllRooms();
     res.json({
       ok: true,
-      rooms: roomRegistry.list()
+      rooms: roomRegistry.list().map(serializeRoom)
     });
   } catch (error) {
     next(error);
@@ -132,7 +170,8 @@ app.post('/rooms', async (req, res, next) => {
     const record = roomRegistry.ensureRoom(room.name, {
       displayName: payload.displayName,
       metadata: payload.metadata,
-      participants: participants.length
+      participants: participants.length,
+      createdAt: room.creationTime ? new Date(room.creationTime).toISOString() : undefined
     });
 
     logger.action('room.created_or_reused', {
@@ -142,7 +181,7 @@ app.post('/rooms', async (req, res, next) => {
 
     res.status(201).json({
       ok: true,
-      room: record
+      room: serializeRoom(record)
     });
   } catch (error) {
     next(error);
@@ -161,10 +200,11 @@ app.get('/rooms/:roomName', async (req, res, next) => {
     const record = roomRegistry.ensureRoom(roomName, {
       displayName: room.metadata?.displayName || room.name,
       metadata: room.metadata || {},
-      participants: participants.length
+      participants: participants.length,
+      createdAt: room.creationTime ? new Date(room.creationTime).toISOString() : undefined
     });
 
-    res.json({ ok: true, room: record });
+    res.json({ ok: true, room: serializeRoom(record) });
   } catch (error) {
     next(error);
   }
@@ -198,7 +238,7 @@ app.patch('/rooms/:roomName', async (req, res, next) => {
       participants: participants.length
     });
 
-    res.json({ ok: true, room: record });
+    res.json({ ok: true, room: serializeRoom(record) });
   } catch (error) {
     next(error);
   }
@@ -251,21 +291,31 @@ app.post('/rooms/:roomName/join', async (req, res, next) => {
     }
 
     const participants = await syncRoomParticipants(roomName);
-    roomRegistry.ensureRoom(roomName, {
+    const record = roomRegistry.ensureRoom(roomName, {
       displayName: room.metadata?.displayName || room.name,
       metadata: room.metadata || {},
-      participants: participants.length
+      participants: participants.length,
+      createdAt: room.creationTime ? new Date(room.creationTime).toISOString() : undefined
     });
 
-    const token = await livekit.buildJoinToken({ roomName, username });
-    logger.action('room.join_token_issued', { room: roomName, username });
+    const assignedUsername = buildUniqueUsername(username, participants);
+    const token = await livekit.buildJoinToken({ roomName, username: assignedUsername });
+    logger.action('room.join_token_issued', {
+      room: roomName,
+      username: assignedUsername,
+      requestedUsername: username,
+      createdAt: record.createdAt,
+      ageSec: serializeRoom(record).ageSec
+    });
 
     res.json({
       ok: true,
       room: roomName,
-      username,
+      username: assignedUsername,
       token,
-      livekitUrl: config.livekitUrl
+      livekitUrl: config.livekitUrl,
+      roomCreatedAt: record.createdAt,
+      roomAgeSec: serializeRoom(record).ageSec
     });
   } catch (error) {
     next(error);
@@ -287,14 +337,24 @@ app.get('/token', async (req, res, next) => {
     }
 
     const participants = await syncRoomParticipants(roomName);
-    roomRegistry.ensureRoom(roomName, {
+    const record = roomRegistry.ensureRoom(roomName, {
       displayName: room.metadata?.displayName || room.name,
       metadata: room.metadata || {},
-      participants: participants.length
+      participants: participants.length,
+      createdAt: room.creationTime ? new Date(room.creationTime).toISOString() : undefined
     });
 
-    const token = await livekit.buildJoinToken({ roomName, username });
-    res.json({ ok: true, token, livekitUrl: config.livekitUrl, room: roomName, username });
+    const assignedUsername = buildUniqueUsername(username, participants);
+    const token = await livekit.buildJoinToken({ roomName, username: assignedUsername });
+    res.json({
+      ok: true,
+      token,
+      livekitUrl: config.livekitUrl,
+      room: roomName,
+      username: assignedUsername,
+      roomCreatedAt: record.createdAt,
+      roomAgeSec: serializeRoom(record).ageSec
+    });
   } catch (error) {
     next(error);
   }

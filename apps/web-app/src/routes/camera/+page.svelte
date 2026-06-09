@@ -89,6 +89,7 @@
     } from "livekit-client";
 
     let videoEl: HTMLVideoElement;
+    let backgroundCanvasEl: HTMLCanvasElement;
     let effectsCanvasEl: HTMLCanvasElement;
     let effects3dCanvasEl: HTMLCanvasElement;
     let stopFaceTracking: (() => void) | null = null;
@@ -104,7 +105,7 @@
     let infoMessage = $state("");
     let showDebugInfo = $state(false);
     let showPerformance = $state(false);
-    let selectedQuality = $state<VideoQuality>("480p");
+    let selectedQuality = $state<VideoQuality>("720p");
     let selectedVideoDeviceId = $state("");
     let selectedAudioDeviceId = $state("");
     let isApplyingQuality = $state(false);
@@ -136,6 +137,7 @@
     let cameraEffects = $state(createDefaultCameraEffectsState());
     let livekitRoom: Room | null = null;
     let activeRoomName = $state<string | null>(null);
+    let activeRoomAgeSec = $state<number | null>(null);
     let roomConnectionState = $state<
         "disconnected" | "connecting" | "connected" | "error"
     >("disconnected");
@@ -547,6 +549,16 @@
         const width = Math.max(1, Math.round(videoEl.clientWidth));
         const height = Math.max(1, Math.round(videoEl.clientHeight));
 
+        if (backgroundCanvasEl) {
+            if (
+                backgroundCanvasEl.width !== width ||
+                backgroundCanvasEl.height !== height
+            ) {
+                backgroundCanvasEl.width = width;
+                backgroundCanvasEl.height = height;
+            }
+        }
+
         if (effectsCanvasEl.width !== width || effectsCanvasEl.height !== height) {
             effectsCanvasEl.width = width;
             effectsCanvasEl.height = height;
@@ -567,13 +579,24 @@
         }
     }
 
-    function clearEffectsOverlay() {
-        const ctx = effectsCanvasEl?.getContext("2d");
-        if (!ctx || !effectsCanvasEl) {
+    function renderBackgroundOverlay() {
+        if (!backgroundCanvasEl || !videoEl) {
             return;
         }
-        ctx.clearRect(0, 0, effectsCanvasEl.width, effectsCanvasEl.height);
-        threeMaskRenderer?.clear();
+
+        syncEffectsCanvasSize();
+        const ctx = backgroundCanvasEl.getContext("2d");
+        if (!ctx) {
+            return;
+        }
+
+        const width = backgroundCanvasEl.width;
+        const height = backgroundCanvasEl.height;
+        ctx.clearRect(0, 0, width, height);
+
+        if (!publishMaskOnly || roomConnectionState !== "connected") {
+            drawBackgroundFrame(ctx, width, height);
+        }
     }
 
     function renderEffectsOverlay(result = latestFaceResult) {
@@ -593,7 +616,7 @@
             videoEl,
             result,
             normalizeEffectsState(cameraEffects),
-            { drawBackground: roomConnectionState !== "connected" },
+            { drawBackground: false },
         );
 
         threeMaskRenderer?.render(
@@ -745,6 +768,10 @@
         }
 
         microphoneEnabled = enabled;
+        if (!enabled) {
+            infoMicrophoneLevel = 0;
+            infoMicrophoneLevelSnapshot = 0;
+        }
         refreshOverlaySnapshots();
         syncDebugInfoLoopState();
         syncMicrophoneLevelLoopState();
@@ -1487,8 +1514,11 @@
 
             context.clearRect(0, 0, width, height);
 
+            if (backgroundCanvasEl) {
+                context.drawImage(backgroundCanvasEl, 0, 0, width, height);
+            }
+
             if (!publishMaskOnly && cameraEnabled) {
-                drawBackgroundFrame(context, width, height);
                 drawCoverVideoFrame(
                     context,
                     videoEl,
@@ -1500,7 +1530,6 @@
             } else {
                 context.fillStyle = "#020617";
                 context.fillRect(0, 0, width, height);
-                drawBackgroundFrame(context, width, height);
             }
 
             if (effects3dCanvasEl) {
@@ -1518,6 +1547,7 @@
 
     function handleUploadBackground(file: File | null) {
         cameraEffects.background = updateEffectAsset(cameraEffects.background, file);
+        renderBackgroundOverlay();
         renderEffectsOverlay();
 
         // Repaint once the uploaded image is actually decoded to avoid a black frame.
@@ -1984,6 +2014,7 @@
         ]);
         livekitRoom = null;
         activeRoomName = null;
+        activeRoomAgeSec = null;
         roomConnectionState = "disconnected";
         roomConnectionError = "";
         participantStreams.clear();
@@ -2039,10 +2070,15 @@
             registerRoomEvents(room, activeSession);
             await room.connect(joinResponse.livekitUrl, joinResponse.token);
             activeRoomName = joinResponse.room;
+            activeRoomAgeSec = joinResponse.roomAgeSec ?? null;
             roomConnectionState = "connected";
             lastParticipantCount = 0;
             localStorage.setItem(ROOM_NAME_STORAGE_KEY, joinResponse.room);
-            localStorage.setItem(USER_NAME_STORAGE_KEY, username);
+            localStorage.setItem(USER_NAME_STORAGE_KEY, joinResponse.username);
+
+            if (joinResponse.username !== username) {
+                showInfoBanner(`Your name was adjusted to ${joinResponse.username}.`);
+            }
 
             // Seed already-subscribed tracks for participants who joined before us.
             for (const participant of room.remoteParticipants.values()) {
@@ -2067,6 +2103,7 @@
             }
             livekitRoom = null;
             activeRoomName = null;
+            activeRoomAgeSec = null;
             showRoomError(getMediaErrorMessage("media", error));
         }
     }
@@ -2152,6 +2189,7 @@
 
     $effect(() => {
         normalizeEffectsState(cameraEffects);
+        renderBackgroundOverlay();
         renderEffectsOverlay();
         syncEffectsTracking();
         void sync3dMaskModel();
@@ -2293,15 +2331,16 @@
     <title>Camera</title>
 </svelte:head>
 
-<div class:camera-view={true} class:in-room={roomConnectionState === "connected"} class:mask-only-preview={publishMaskOnly && roomConnectionState !== "connected"}>
+<div class:camera-view={true} class:in-room={roomConnectionState === "connected"} class:mask-only-preview={publishMaskOnly && roomConnectionState !== "connected"} class:mask-3d-mode={cameraEffects.mode === "mask-3d"}>
     <video bind:this={videoEl} autoplay playsinline muted></video>
+    <canvas bind:this={backgroundCanvasEl} class="background-overlay"></canvas>
     <canvas bind:this={effects3dCanvasEl} class="effects-3d-overlay"></canvas>
     <canvas bind:this={effectsCanvasEl} class="effects-overlay"></canvas>
 
     <RoomParticipantsGrid
         roomName={activeRoomName}
+        roomAgeSec={activeRoomAgeSec}
         connectionState={roomConnectionState}
-        connectionError={roomConnectionError}
         participants={participantTiles}
     />
 
@@ -2432,6 +2471,15 @@
         pointer-events: none;
     }
 
+    .background-overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 2;
+        pointer-events: none;
+    }
+
     .effects-overlay {
         position: absolute;
         inset: 0;
@@ -2439,6 +2487,14 @@
         height: 100%;
         z-index: 4;
         pointer-events: none;
+    }
+
+    .camera-view.mask-3d-mode .effects-3d-overlay {
+        z-index: 5;
+    }
+
+    .camera-view.mask-3d-mode .effects-overlay {
+        z-index: 4;
     }
 
     .camera-view.in-room video,

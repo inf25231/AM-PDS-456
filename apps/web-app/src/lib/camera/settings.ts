@@ -83,7 +83,7 @@ export function readCameraPreferences(storage: Storage): CameraPreferences {
     return {
         showDebugInfo: debugValue === "true",
         showPerformance: performanceValue === "true",
-        selectedQuality: isVideoQuality(qualityValue) ? qualityValue : "480p",
+        selectedQuality: isVideoQuality(qualityValue) ? qualityValue : "720p",
         selectedVideoDeviceId: storage.getItem(STORAGE_KEYS.cameraDeviceId) ?? "",
         selectedAudioDeviceId: storage.getItem(STORAGE_KEYS.microphoneDeviceId) ?? "",
         publishMaskOnly: publishMaskOnlyValue === "true",
