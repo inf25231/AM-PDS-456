@@ -6,13 +6,13 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "check": "node --check src/index.js",
-    "smoke": "node scripts/smoke-test.mjs"
+    "smoke": "node scripts/smoke-test.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "livekit-server-sdk": "^2.15.3",
-    "ws": "^8.21.0"
+    "livekit-server-sdk": "^2.15.3"
   }
 }
