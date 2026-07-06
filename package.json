@@ -1,11 +1,25 @@
 {
   "name": "amphi-calls",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
     "web:dev": "pnpm --filter web-app dev",
     "signal:dev": "pnpm --filter signaling-server dev",
     "build": "pnpm -r build",
-    "check": "pnpm -r check"
+    "check": "pnpm -r check",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.20.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.4",
+    "prettier-plugin-svelte": "^4.1.1",
+    "typescript-eslint": "^8.63.0"
   }
 }
