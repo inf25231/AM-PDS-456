@@ -8,7 +8,7 @@ Small pnpm workspace with two apps:
 ## Environment
 
 - Node.js 24+
-- pnpm 11+
+- pnpm 10.22.0 (pinned via `packageManager` in `package.json`)
 
 ## Install
 
