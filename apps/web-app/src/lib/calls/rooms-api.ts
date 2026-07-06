@@ -13,8 +13,10 @@ export type JoinRoomResponse = {
  *
  * Override at build time via VITE_SIGNALING_PREFIX env var.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const API_PREFIX: string = (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_SIGNALING_PREFIX : undefined) ?? '/api';
+const API_PREFIX: string =
+  (typeof import.meta !== 'undefined'
+    ? (import.meta as any).env?.VITE_SIGNALING_PREFIX
+    : undefined) ?? '/api';
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json()) as T & { error?: string };
@@ -31,7 +33,10 @@ export async function createRoom(roomName: string, displayName?: string) {
     body: JSON.stringify({ name: roomName, displayName: displayName || roomName })
   });
 
-  return parseJson<{ ok: boolean; room: { name: string; displayName: string; createdAt?: string | null } }>(response);
+  return parseJson<{
+    ok: boolean;
+    room: { name: string; displayName: string; createdAt?: string | null };
+  }>(response);
 }
 
 export async function joinRoom(roomName: string, username: string) {
@@ -49,9 +54,11 @@ export async function getServerStatus() {
   return parseJson<{
     ok: boolean;
     roomsTracked: number;
-    rooms: Array<{ name: string; displayName: string; createdAt?: string | null; participants?: number }>;
+    rooms: Array<{
+      name: string;
+      displayName: string;
+      createdAt?: string | null;
+      participants?: number;
+    }>;
   }>(response);
 }
-
-
-

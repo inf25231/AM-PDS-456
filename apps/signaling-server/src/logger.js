@@ -10,6 +10,19 @@ function formatMeta(meta) {
   }
 }
 
+/**
+ * Creates a scoped logger that prefixes every line with a timestamp and scope name.
+ * Output format: [ISO-timestamp] [scope] [level] message {optional JSON meta}
+ *
+ * Levels:
+ * - info   — general lifecycle events (startup, shutdown)
+ * - warn   — recoverable issues (sync failures, missing rooms)
+ * - error  — unhandled errors surfaced to the user
+ * - action — audit trail for intentional state changes (room created, deleted, etc.)
+ *
+ * @param {string} scope - Label for the log source, e.g. 'signaling-server'
+ * @returns {{ info, warn, error, action }}
+ */
 export function createActionLogger(scope) {
   function log(level, message, meta) {
     const timestamp = new Date().toISOString();
@@ -32,4 +45,3 @@ export function createActionLogger(scope) {
     }
   };
 }
-

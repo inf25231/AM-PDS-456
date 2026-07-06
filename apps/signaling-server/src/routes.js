@@ -1,15 +1,18 @@
-export function registerRoutes(app, {
-  config,
-  logger,
-  livekit,
-  roomRegistry,
-  roomService,
-  isRoomMissingError
-}) {
+/**
+ * Registers all HTTP routes on the Express app.
+ * Handlers reply { ok: true, ... } on success or { ok: false, error } on failure;
+ * unexpected errors are passed to next(error).
+ */
+export function registerRoutes(
+  app,
+  { config, logger, livekit, roomRegistry, roomService, isRoomMissingError }
+) {
+  /** Health check. */
   app.get('/health', (_req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() });
   });
 
+  /** Rooms we track locally (no LiveKit call). */
   app.get('/status', (_req, res) => {
     res.json({
       ok: true,
@@ -18,6 +21,7 @@ export function registerRoutes(app, {
     });
   });
 
+  /** Live connection quality per room. Slow: one LiveKit call per room. */
   app.get('/status/connection-quality', async (_req, res, next) => {
     try {
       const rooms = roomRegistry.list();
@@ -45,6 +49,7 @@ export function registerRoutes(app, {
     }
   });
 
+  /** Full room list, synced from LiveKit (heavier than /status). */
   app.get('/rooms', async (_req, res, next) => {
     try {
       await roomService.syncAllRooms();
@@ -57,6 +62,7 @@ export function registerRoutes(app, {
     }
   });
 
+  /** Create a room, or reuse an existing one with the same name. */
   app.post('/rooms', async (req, res, next) => {
     try {
       const payload = roomService.parseRoomPayload(req.body || {});
@@ -85,6 +91,7 @@ export function registerRoutes(app, {
     }
   });
 
+  /** Fetch one room from LiveKit and sync it. 404 if it doesn't exist there. */
   app.get('/rooms/:roomName', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
@@ -101,14 +108,33 @@ export function registerRoutes(app, {
     }
   });
 
+  /** Update a room's displayName and/or metadata. */
   app.patch('/rooms/:roomName', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
-      const current = roomRegistry.get(roomName) || roomRegistry.ensureRoom(roomName);
-      const nextDisplayName = String(req.body?.displayName || current.displayName || roomName).trim() || roomName;
+
+      let current = roomRegistry.get(roomName);
+      if (!current) {
+        current = roomRegistry.ensureRoom(roomName);
+      }
+
+      // pick the new display name: body wins, then current, then room name
+      let nextDisplayName = roomName;
+      if (req.body?.displayName) {
+        nextDisplayName = req.body.displayName;
+      } else if (current.displayName) {
+        nextDisplayName = current.displayName;
+      }
+      nextDisplayName = nextDisplayName.trim() || roomName;
+
+      let patchMetadata = {};
+      if (typeof req.body?.metadata === 'object' && req.body?.metadata) {
+        patchMetadata = req.body.metadata;
+      }
+
       const nextMetadata = {
         ...(current.metadata || {}),
-        ...(typeof req.body?.metadata === 'object' && req.body?.metadata ? req.body.metadata : {}),
+        ...patchMetadata,
         displayName: nextDisplayName
       };
 
@@ -135,6 +161,7 @@ export function registerRoutes(app, {
     }
   });
 
+  /** Delete a room now. LiveKit disconnects everyone still inside. */
   app.delete('/rooms/:roomName', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
@@ -148,6 +175,7 @@ export function registerRoutes(app, {
     }
   });
 
+  /** Current participants of a room, synced from LiveKit. */
   app.get('/rooms/:roomName/participants', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
@@ -168,75 +196,85 @@ export function registerRoutes(app, {
     }
   });
 
+  /**
+   * Shared join logic for POST /rooms/:roomName/join and the legacy GET /token.
+   * Validates input, ensures the room exists, assigns a unique username
+   * (numeric suffix if taken) and mints a signed token.
+   */
+  async function issueJoinToken(rawRoomName, rawUsername) {
+    const roomName = livekit.normalizeRoomName(rawRoomName);
+    const username = String(rawUsername || '').trim();
+    if (!roomName || !username) {
+      return { ok: false, status: 400, error: 'room and username are required' };
+    }
+
+    const room = await livekit.getRoom(roomName);
+    if (!room) {
+      return { ok: false, status: 404, error: 'Room not found' };
+    }
+
+    const participants = await roomService.syncRoomParticipants(roomName);
+    roomService.trackRoomFromLivekit(room, participants.length);
+
+    const assignedUsername = roomService.buildUniqueUsername(username, participants);
+    const token = await livekit.buildJoinToken({ roomName, username: assignedUsername });
+
+    return {
+      ok: true,
+      room: roomName,
+      username: assignedUsername,
+      token,
+      livekitUrl: config.livekitUrl
+    };
+  }
+
+  /** Join a room: returns a signed token. 404 if the room doesn't exist. */
   app.post('/rooms/:roomName/join', async (req, res, next) => {
     try {
-      const roomName = livekit.normalizeRoomName(req.params.roomName);
-      const username = String(req.body?.username || '').trim();
-      if (!roomName || !username) {
-        return res.status(400).json({ ok: false, error: 'roomName and username are required' });
+      const result = await issueJoinToken(req.params.roomName, req.body?.username);
+      if (!result.ok) {
+        return res.status(result.status).json({ ok: false, error: result.error });
       }
-
-      const room = await livekit.getRoom(roomName);
-      if (!room) {
-        return res.status(404).json({ ok: false, error: 'Room not found' });
-      }
-
-      const participants = await roomService.syncRoomParticipants(roomName);
-      roomService.trackRoomFromLivekit(room, participants.length);
-
-      const assignedUsername = roomService.buildUniqueUsername(username, participants);
-      const token = await livekit.buildJoinToken({ roomName, username: assignedUsername });
 
       logger.action('room.join_token_issued', {
-        room: roomName,
-        username: assignedUsername,
-        requestedUsername: username
+        room: result.room,
+        username: result.username,
+        requestedUsername: String(req.body?.username || '').trim()
       });
 
-      res.json({
-        ok: true,
-        room: roomName,
-        username: assignedUsername,
-        token,
-        livekitUrl: config.livekitUrl
-      });
+      res.json(result);
     } catch (error) {
       next(error);
     }
   });
 
-  // Backward-compatible token endpoint used by older clients.
+  /**
+   * Old token endpoint, kept for older clients. Same as POST /rooms/:roomName/join.
+   * @deprecated Use POST /rooms/:roomName/join instead.
+   */
   app.get('/token', async (req, res, next) => {
     try {
-      const roomName = livekit.normalizeRoomName(req.query.room);
-      const username = String(req.query.username || '').trim();
-      if (!roomName || !username) {
-        return res.status(400).json({ ok: false, error: 'room and username are required' });
+      const result = await issueJoinToken(req.query.room, req.query.username);
+      if (!result.ok) {
+        return res.status(result.status).json({ ok: false, error: result.error });
       }
 
-      const room = await livekit.getRoom(roomName);
-      if (!room) {
-        return res.status(404).json({ ok: false, error: 'Room not found' });
-      }
-
-      const participants = await roomService.syncRoomParticipants(roomName);
-      roomService.trackRoomFromLivekit(room, participants.length);
-
-      const assignedUsername = roomService.buildUniqueUsername(username, participants);
-      const token = await livekit.buildJoinToken({ roomName, username: assignedUsername });
-
-      res.json({
-        ok: true,
-        token,
-        livekitUrl: config.livekitUrl,
-        room: roomName,
-        username: assignedUsername
+      logger.action('room.join_token_issued', {
+        room: result.room,
+        username: result.username,
+        requestedUsername: String(req.query.username || '').trim()
       });
+
+      res.json(result);
     } catch (error) {
       next(error);
     }
   });
 
+  /**
+   * Manually clean up an empty room. 409 if it still has participants.
+   * Safe to call even if the room is already gone from LiveKit.
+   */
   app.post('/rooms/:roomName/cleanup', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
@@ -265,6 +303,7 @@ export function registerRoutes(app, {
     }
   });
 
+  /** Catch-all error handler: anything passed to next(error) becomes a 500. */
   app.use((error, _req, res, _next) => {
     logger.error('request_failed', {
       message: error?.message || 'Unknown error'
@@ -276,4 +315,3 @@ export function registerRoutes(app, {
     });
   });
 }
-

@@ -1,4 +1,4 @@
-пimport { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,7 +12,10 @@ if (existsSync(envFile)) {
     const eqIndex = trimmed.indexOf('=');
     if (eqIndex < 1) continue;
     const key = trimmed.slice(0, eqIndex).trim();
-    const value = trimmed.slice(eqIndex + 1).trim().replace(/^["']|["']$/g, '');
+    const value = trimmed
+      .slice(eqIndex + 1)
+      .trim()
+      .replace(/^["']|["']$/g, '');
     if (!(key in process.env)) process.env[key] = value;
   }
 }
@@ -33,7 +36,9 @@ async function requestExpectStatus(path, expectedStatus, options) {
   const response = await fetch(`${baseUrl}${path}`, options);
   const body = await response.json();
   if (response.status !== expectedStatus) {
-    throw new Error(`${path} expected ${expectedStatus}, got ${response.status}: ${body.error || 'unknown error'}`);
+    throw new Error(
+      `${path} expected ${expectedStatus}, got ${response.status}: ${body.error || 'unknown error'}`
+    );
   }
   return body;
 }
@@ -87,6 +92,3 @@ run().catch((error) => {
   console.error(error.message);
   process.exit(1);
 });
-
-
-

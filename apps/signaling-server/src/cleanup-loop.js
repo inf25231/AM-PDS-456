@@ -1,3 +1,11 @@
+/**
+ * Periodic loop that deletes rooms empty longer than config.roomEmptyTtlMs.
+ * Runs every config.roomSweepIntervalMs; timer is unref()'d so it never
+ * keeps the process alive on its own.
+ *
+ * @param {{ config, logger, livekit, roomRegistry, roomService, isRoomMissingError }} deps
+ * @returns {{ start: () => void, stop: () => void, sweepEmptyRooms: () => Promise<void> }}
+ */
 export function createCleanupLoop({
   config,
   logger,
@@ -8,12 +16,19 @@ export function createCleanupLoop({
 }) {
   let timer = null;
 
+  /**
+   * One sweep pass: sync participants, delete rooms empty past the TTL, and
+   * deregister rooms already gone from LiveKit. Errors are logged but never
+   * re-thrown, so one bad room can't block cleanup of the others.
+   *
+   * @returns {Promise<void>}
+   */
   async function sweepEmptyRooms() {
     const rooms = roomRegistry.list();
     const nowMs = Date.now();
 
     for (const room of rooms) {
-      let participants = [];
+      let participants;
       try {
         participants = await roomService.syncRoomParticipants(room.name);
       } catch (error) {
@@ -33,6 +48,7 @@ export function createCleanupLoop({
         continue;
       }
 
+      // Skip rooms that still have participants
       if (participants.length > 0) {
         continue;
       }
@@ -41,6 +57,7 @@ export function createCleanupLoop({
       const emptySinceMs = record?.emptySince ? Date.parse(record.emptySince) : nowMs;
       const emptyForMs = nowMs - emptySinceMs;
 
+      // Room hasn't been empty long enough yet
       if (emptyForMs < config.roomEmptyTtlMs) {
         continue;
       }
@@ -72,6 +89,7 @@ export function createCleanupLoop({
     }
   }
 
+  /** Starts the sweep timer. Calling start() twice leaks a timer — stop() first to restart. */
   function start() {
     timer = setInterval(() => {
       void sweepEmptyRooms();
@@ -80,6 +98,7 @@ export function createCleanupLoop({
     timer.unref?.();
   }
 
+  /** Stops the timer. Safe to call even if never started. */
   function stop() {
     if (timer) {
       clearInterval(timer);
@@ -93,4 +112,3 @@ export function createCleanupLoop({
     sweepEmptyRooms
   };
 }
-

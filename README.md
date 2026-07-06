@@ -1,14 +1,20 @@
 # Amphi Calls
 
-Small pnpm workspace with two apps:
+Small pnpm workspace with two apps and a shared package:
 
-- `apps/web-app` — SvelteKit client application
-- `apps/signaling-server` — small WebSocket signaling server
+- `apps/web-app` — SvelteKit client: camera capture, face tracking, 3D-mask
+  and background effects, LiveKit video calls.
+- `apps/signaling-server` — Express + LiveKit room API (control plane only:
+  issues join tokens and manages room lifecycle; media never passes through
+  it). See `apps/signaling-server/README.md` for the full API, project
+  structure, and environment variables.
+- `packages/camera-core` — shared pure/Svelte-free camera helpers (device
+  enumeration, quality presets, settings persistence) used by `web-app`.
 
 ## Environment
 
 - Node.js 24+
-- pnpm 11+
+- pnpm 10.22.0 (pinned via `packageManager` in `package.json`)
 
 ## Install
 
@@ -25,6 +31,14 @@ pnpm check
 ```
 
 This runs the project checks for all workspace packages.
+
+## Lint & Format
+
+```bash
+pnpm lint          # ESLint (JS/TS/Svelte)
+pnpm format        # Prettier — write formatting fixes
+pnpm format:check  # Prettier — check only, no writes
+```
 
 ## Run The Web App
 
@@ -64,10 +78,17 @@ Preview the production web build locally:
 pnpm --filter web-app preview
 ```
 
+Run signaling-server tests:
+
+```bash
+pnpm --filter signaling-server test
+```
+
 ## Typical Local Flow
 
 ```bash
 pnpm install
 pnpm check
+pnpm lint
 pnpm web:dev
 ```

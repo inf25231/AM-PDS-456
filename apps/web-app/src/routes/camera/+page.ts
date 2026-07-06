@@ -2,4 +2,3 @@
 // MediaDevices, AudioContext, WebGL, and localStorage.
 // Disable SSR so Vercel/Node never tries to render it on the server.
 export const ssr = false;
-

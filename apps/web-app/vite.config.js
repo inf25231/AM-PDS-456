@@ -7,15 +7,15 @@ import { defineConfig } from 'vite';
 const signalingTarget = process.env.VITE_SIGNALING_URL || 'http://localhost:8080';
 
 export default defineConfig({
-    plugins: [tailwindcss(), sveltekit()],
-    server: {
-        allowedHosts: ['.trycloudflare.com'],
-        proxy: {
-            '/api': {
-                target: signalingTarget,
-                changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/api/, '')
-            }
-        }
+  plugins: [tailwindcss(), sveltekit()],
+  server: {
+    allowedHosts: ['.trycloudflare.com'],
+    proxy: {
+      '/api': {
+        target: signalingTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      }
     }
+  }
 });

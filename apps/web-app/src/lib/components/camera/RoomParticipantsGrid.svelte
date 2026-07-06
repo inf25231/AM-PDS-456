@@ -1,7 +1,30 @@
+<!--
+RoomParticipantsGrid.svelte
+
+Borderless full-bleed grid of participants.
+
+The LOCAL tile renders the main camera stage (passed in as a snippet):
+the live <video> + effect canvas overlays. This is the exact same visual
+  the user saw before joining, so they see themselves with effects with
+  zero extra plumbing. Remote peers see the equivalent picture via the
+  composition track (captured from an offscreen canvas).
+
+  Remote tiles render each participant's subscribed MediaStream.
+
+  Layout (cols = ceil(sqrt(N)), rows = ceil(N/cols), mobile transposes).
+  -->
 <script lang="ts">
+  import cameraOffIcon from '$lib/images/camera-off.svg';
+  import micOffIcon from '$lib/images/mic-off.svg';
+  import signal1 from '$lib/images/signal-1.svg';
+  import signal2 from '$lib/images/signal-2.svg';
+  import signal3 from '$lib/images/signal-3.svg';
+  import signal4 from '$lib/images/signal-4.svg';
+  import signalUnknown from '$lib/images/signal-unknown.svg';
+
   type RoomConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-  type ParticipantTile = {
+  type ParticipantTileData = {
     id: string;
     name: string;
     isLocal: boolean;
@@ -15,36 +38,56 @@
   type Props = {
     roomName: string | null;
     connectionState: RoomConnectionState;
-    participants: ParticipantTile[];
+    participants: ParticipantTileData[];
   };
 
-  let {
-    roomName = null,
-    connectionState = 'disconnected',
-    participants = []
-  }: Props = $props();
+  let { roomName, connectionState, participants }: Props = $props();
+
+  // ----------------------------------------------------------------
+  // Grid sizing
+  // ----------------------------------------------------------------
 
   const tileCount = $derived(Math.max(1, participants.length));
-  const gridColumns = $derived(Math.ceil(Math.sqrt(tileCount)));
-  const gridRows = $derived(Math.ceil(tileCount / gridColumns));
-  const mobileGridColumns = $derived(tileCount <= 2 ? 1 : 2);
-  const mobileGridRows = $derived(Math.ceil(tileCount / mobileGridColumns));
+  const desktopCols = $derived(Math.ceil(Math.sqrt(tileCount)));
+  const desktopRows = $derived(Math.ceil(tileCount / desktopCols));
+  const mobileCols = $derived(desktopRows);
+  const mobileRows = $derived(desktopCols);
 
+  // ----------------------------------------------------------------
+  // Helpers
+  // ----------------------------------------------------------------
+
+  function signalIconFor(quality: string): string {
+    switch (quality) {
+      case 'excellent':
+        return signal4;
+      case 'good':
+        return signal3;
+      case 'poor':
+        return signal2;
+      case 'lost':
+        return signal1;
+      default:
+        return signalUnknown;
+    }
+  }
+
+  /** Attach a MediaStream to a media element reactively. */
   function bindMediaStream(node: HTMLMediaElement, stream: MediaStream | null) {
-    const apply = (nextStream: MediaStream | null) => {
-      if (node.srcObject !== nextStream) {
-        node.srcObject = nextStream;
-      }
-
-      if (nextStream) {
+    const apply = (next: MediaStream | null) => {
+      if (node.srcObject === next) return;
+      node.srcObject = next;
+      if (next) {
         void node.play().catch(() => {
-          // Autoplay restrictions are expected until user interaction.
+          // Autoplay restrictions are expected.
         });
       }
     };
-
     apply(stream);
     return {
+      update(next: MediaStream | null) {
+        apply(next);
+      },
       destroy() {
         node.pause();
         node.srcObject = null;
@@ -54,145 +97,151 @@
 </script>
 
 {#if roomName}
-  <div class="room-session-panel" aria-live="polite">
-    <div class="room-session-header">
-      <div>
-        <div class="room-session-title">Room: {roomName}</div>
-        <div class="room-session-subtitle">
-          {connectionState === 'connected'
-            ? `${participants.length} participant(s)`
-            : connectionState === 'connecting'
-              ? 'Connecting...'
-              : connectionState === 'error'
-                ? 'Connection error'
-                : 'Disconnected'}
-        </div>
-      </div>
+  <!-- Top-left info overlay -->
+  <div class="room-info" aria-live="polite">
+    <div class="room-name">Room: {roomName}</div>
+    <div class="room-subtitle">
+      {#if connectionState === 'connected'}
+        {participants.length} participant{participants.length === 1 ? '' : 's'}
+      {:else if connectionState === 'connecting'}
+        Connecting…
+      {:else if connectionState === 'error'}
+        Connection error
+      {:else}
+        Disconnected
+      {/if}
     </div>
+  </div>
 
-    <div
-      class="participants-grid"
-      style={`--participant-columns:${gridColumns};--participant-rows:${gridRows};--participant-mobile-columns:${mobileGridColumns};--participant-mobile-rows:${mobileGridRows};`}
-    >
-      {#each participants as participant (participant.id)}
-        <article class:participant-tile={true} class:participant-speaking={participant.isSpeaking}>
-          {#if participant.stream && participant.cameraOn}
-            <video
-              class="participant-media"
-              autoplay
-              playsinline
-              muted={participant.isLocal}
-              use:bindMediaStream={participant.stream}
-            ></video>
-          {:else}
-            <div class="participant-placeholder participant-media">Camera off</div>
-          {/if}
+  <div
+    class="grid"
+    style={`
+                --cols: ${desktopCols};
+                --rows: ${desktopRows};
+                --mobile-cols: ${mobileCols};
+                --mobile-rows: ${mobileRows};
+            `}
+  >
+    {#each participants as p (p.id)}
+      <article class="tile" class:speaking={p.isSpeaking}>
+        {#if p.isLocal}
+          <!-- Empty cell. The camera stage (in CameraStage.svelte) is
+                 positioned over this first cell via CSS. -->
+        {:else if p.stream && p.cameraOn}
+          <video class="tile-video" autoplay playsinline use:bindMediaStream={p.stream}></video>
+        {:else}
+          <div class="tile-placeholder" aria-label="Camera is off">
+            <img src={cameraOffIcon} alt="" />
+          </div>
+        {/if}
 
-          {#if participant.stream && participant.microphoneOn && !participant.cameraOn}
-            <audio
-              class="participant-audio"
-              autoplay
-              muted={participant.isLocal}
-              use:bindMediaStream={participant.stream}
-            ></audio>
-          {/if}
+        {#if !p.isLocal && p.stream && p.microphoneOn && !p.cameraOn}
+          <audio class="tile-audio" autoplay use:bindMediaStream={p.stream}></audio>
+        {/if}
 
-          <footer class="participant-meta">
-            <span>{participant.name}{participant.isLocal ? ' (you)' : ''}</span>
-            <span class="participant-quality">
-              {participant.connectionQuality}
-              · {participant.microphoneOn ? 'mic on' : 'mic off'}
-            </span>
-          </footer>
-        </article>
-      {/each}
-    </div>
+        <footer class="tile-overlay">
+          <span class="tile-name" class:speaking-name={p.isSpeaking}>
+            {p.name}{p.isLocal ? ' (you)' : ''}
+          </span>
+          <span class="tile-icons" aria-label="Participant status">
+            {#if !p.microphoneOn}
+              <img src={micOffIcon} alt="Microphone off" class="status-icon" />
+            {/if}
+            <img
+              src={signalIconFor(p.connectionQuality)}
+              alt={`Signal: ${p.connectionQuality}`}
+              class="signal-icon"
+            />
+          </span>
+        </footer>
+      </article>
+    {/each}
   </div>
 {/if}
 
 <style>
-  .room-session-panel {
+  .room-info {
     position: absolute;
-    z-index: 12;
-    left: 1rem;
-    right: 1rem;
     top: 1rem;
-    bottom: 6.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    min-height: 0;
+    left: 1rem;
+    z-index: 14;
+    color: rgba(255, 255, 255, 0.95);
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
   }
 
-  .room-session-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    color: rgba(255, 255, 255, 0.92);
-  }
-
-  .room-session-title {
+  .room-name {
     font-size: 0.95rem;
     font-weight: 700;
   }
 
-  .room-session-subtitle {
+  .room-subtitle {
     font-size: 0.76rem;
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.8);
   }
 
-  .participants-grid {
-    display: grid;
-    grid-template-columns: repeat(var(--participant-columns), minmax(0, 1fr));
-    grid-template-rows: repeat(var(--participant-rows), minmax(0, 1fr));
-    gap: 0.8rem;
-    flex: 1 1 auto;
-    height: auto;
-    min-height: 0;
-    align-items: stretch;
-  }
-
-  .participant-tile {
-    position: relative;
-    border-radius: 18px;
-    overflow: hidden;
-    border: 2px solid rgba(255, 255, 255, 0.14);
-    background: rgba(12, 12, 12, 0.85);
-    height: 100%;
-    min-height: 0;
-    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.28);
-    transition: border-color 180ms ease, box-shadow 180ms ease;
-  }
-
-  .participant-speaking {
-    border-color: rgba(88, 234, 149, 0.95);
-    box-shadow: 0 0 0 4px rgba(88, 234, 149, 0.25);
-  }
-
-  .participant-tile video,
-  .participant-placeholder {
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    display: block;
-    object-fit: cover;
-  }
-
-  .participant-media {
+  .grid {
     position: absolute;
     inset: 0;
+    z-index: 12;
+    display: grid;
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+    grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+    gap: 0;
+    background: #000;
   }
 
-  .participant-placeholder {
+  @media (max-width: 640px) {
+    .grid {
+      grid-template-columns: repeat(var(--mobile-cols), minmax(0, 1fr));
+      grid-template-rows: repeat(var(--mobile-rows), minmax(0, 1fr));
+    }
+  }
+
+  .tile {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: #000;
+    margin: 0;
+    padding: 0;
+    outline: 2px solid transparent;
+    outline-offset: -2px;
+    transition: outline-color 160ms ease;
+  }
+
+  .tile.speaking {
+    outline-color: rgba(88, 234, 149, 0.95);
+  }
+
+  .tile-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .tile-placeholder {
+    position: absolute;
+    inset: 0;
     display: grid;
     place-items: center;
-    padding-bottom: 0;
-    color: rgba(255, 255, 255, 0.65);
-    font-size: 0.78rem;
+    background: #000;
   }
 
-  .participant-audio {
+  .tile-placeholder img {
+    width: 48px;
+    height: 48px;
+    opacity: 0.7;
+    filter: invert(1);
+  }
+
+  .tile-audio {
     position: absolute;
     width: 0;
     height: 0;
@@ -200,49 +249,47 @@
     pointer-events: none;
   }
 
-  .participant-meta {
+  .tile-overlay {
     position: absolute;
     left: 0;
     right: 0;
     bottom: 0;
+    z-index: 5;
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.38rem 0.5rem;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.2));
-    color: rgba(255, 255, 255, 0.93);
-    font-size: 0.7rem;
+    padding: 0.4rem 0.6rem;
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.78rem;
+    pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
   }
 
-  .participant-quality {
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.72);
+  .tile-name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 160ms ease;
   }
 
-  @media (max-width: 640px) {
-    .room-session-panel {
-      left: 0.75rem;
-      right: 0.75rem;
-      top: 0.75rem;
-      bottom: 6.5rem;
-    }
+  .tile-name.speaking-name {
+    color: rgba(120, 240, 170, 1);
+  }
 
-    .participants-grid {
-      grid-template-columns: repeat(var(--participant-mobile-columns), minmax(0, 1fr));
-      grid-template-rows: repeat(var(--participant-mobile-rows), minmax(0, 1fr));
-      gap: 0.55rem;
-    }
+  .tile-icons {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 0 0 auto;
+  }
+
+  .status-icon,
+  .signal-icon {
+    width: 16px;
+    height: 16px;
+    filter: invert(1);
+    opacity: 0.9;
   }
 </style>
-
-
-
-
-
-
-
-
-
-
-

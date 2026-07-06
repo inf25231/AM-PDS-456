@@ -1,28 +1,218 @@
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
 html,
 body,
 #app {
-    margin: 0;
-    height: 100%;
+  margin: 0;
+  height: 100%;
 }
+
+/* ==========================================================================
+   Camera view + design tokens
+   ========================================================================== */
 
 .camera-view {
-    height: 100dvh;
-    width: 100%;
-    position: relative;
-    overflow: hidden;
-    background: #000;
+  height: 100dvh;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+
+  /* Design tokens — single source of truth for camera UI controls */
+  --control-size: 48px;
+  --control-radius: 999px;
+  --control-bg: rgba(0, 0, 0, 0.65);
+  --control-bg-danger: rgba(220, 38, 38, 0.92);
+  --control-color: #fff;
+  --control-blur: blur(6px);
+  --control-padding-x: 1.2rem;
+  --control-gap: 0.75rem;
+  --control-corner-offset: 1.5rem;
+
+  /* === Surface tokens (popovers / panels / form rows) === */
+  --surface-bg: rgba(0, 0, 0, 0.65);
+  --surface-bg-soft: rgba(255, 255, 255, 0.06);
+  --surface-border: rgba(255, 255, 255, 0.14);
+  --surface-blur: blur(12px);
+  --surface-radius: 16px;
+  --surface-radius-inner: 12px;
+  --surface-padding: 1rem;
+
+  /* === Text tokens === */
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.62);
+
+  /* === Stage layer tokens (bottom -> top) ===
+       Centralizing z-index here avoids magic numbers scattered across
+       overlay rules. Bumping a layer means bumping one number here. */
+  --layer-webcam: 1; /* <video>                                       */
+  --layer-background: 2; /* uploaded image / solid color                  */
+  --layer-model: 3; /* 3D mask (ThreeMaskRenderer)                   */
+  --layer-cutouts: 4; /* eyes/mouth/face windows + landmarks debug     */
+  --layer-participants: 8; /* RoomParticipantsGrid (in-room)                */
+  --layer-placeholder: 10; /* MediaPlaceholder (camera off/loading)         */
 }
 
-.camera-view video, .overlay {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-    background: rgb(0 0 0 / 0.5);
+@media (max-width: 640px) {
+  .camera-view {
+    --control-size: 44px;
+    --control-padding-x: 1rem;
+    --control-gap: 0.5rem;
+    --control-corner-offset: 0.75rem;
+  }
 }
 
-.overlay {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
+.control-icon {
+  width: 26px;
+  height: 26px;
+  display: block;
+  filter: invert(1);
+}
+
+@media (min-width: 641px) {
+  .control-icon {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+.effects-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ==========================================================================
+   Stage layers
+   --------------------------------------------------------------------------
+   Layer order (bottom -> top), per the cutouts architecture:
+
+     1. <video>            -- the raw webcam stream
+     2. .background-overlay -- image or solid color fill
+     3. .effects-3d-overlay -- 3D model (ThreeMaskRenderer)
+     4. .effects-overlay    -- 2D cutouts (eye/mouth/face windows) + landmarks
+
+   Conceptually, the cutouts layer "punches windows" through the layers
+   above (model, background) so the underlying webcam shows through —
+   the Talking Object / Annoying Orange effect.
+   ========================================================================== */
+
+.camera-view video,
+.camera-view .overlay {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.overlay,
+.background-overlay,
+.effects-overlay,
+.effects-3d-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.camera-stage > video {
+  z-index: var(--layer-webcam);
+}
+.camera-stage > .background-overlay {
+  z-index: var(--layer-background);
+}
+.camera-stage > .effects-3d-overlay {
+  z-index: var(--layer-model);
+}
+.camera-stage > .effects-overlay {
+  z-index: var(--layer-cutouts);
+}
+
+.camera-stage video,
+.camera-stage .background-overlay,
+.camera-stage .effects-overlay,
+.camera-stage .effects-3d-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+/* In-room: the stage lives inside the local grid tile. Position its layers
+   absolutely within that tile (not the whole viewport). */
+.local-stage video,
+.local-stage .background-overlay,
+.local-stage .effects-3d-overlay,
+.local-stage .effects-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.local-stage video {
+  z-index: var(--layer-webcam);
+}
+.local-stage .background-overlay {
+  z-index: var(--layer-background);
+}
+.local-stage .effects-3d-overlay {
+  z-index: var(--layer-model);
+}
+.local-stage .effects-overlay {
+  z-index: var(--layer-cutouts);
+}
+
+/* --------------------------------------------------------------------------
+   Webcam preview hidden (hide-preview toggle in EffectsMenu)
+   --------------------------------------------------------------------------
+   Camera + tracking + effects all still run. Only the <video> element is
+   hidden from view, so background + model + cutouts render against the
+   stage background instead of the live camera frame.
+
+   Note: cutouts will still draw their windows -- the windows reveal the
+   webcam content because effects-renderer samples directly from <video>,
+   not from this CSS-hidden element. Hidden here means "don't show the
+   raw stream in the preview", not "stop reading from it". */
+.camera-view.webcam-hidden > video {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.camera-view.webcam-hidden .local-stage video {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Banners
+   ========================================================================== */
+
+.banners {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 40;
+  pointer-events: none;
+  align-items: center;
+  max-width: min(90vw, 480px);
+  width: max-content;
+}
+
+.banners > * {
+  pointer-events: auto;
 }
