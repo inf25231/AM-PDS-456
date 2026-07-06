@@ -1,10 +1,7 @@
 /**
- * Creates a periodic cleanup loop that scans all tracked rooms and deletes
- * those that have been empty longer than config.roomEmptyTtlMs.
- *
- * The loop runs every config.roomSweepIntervalMs milliseconds.
- * It uses timer.unref() so it will not prevent the Node.js process from
- * exiting naturally if everything else has settled.
+ * Periodic loop that deletes rooms empty longer than config.roomEmptyTtlMs.
+ * Runs every config.roomSweepIntervalMs; timer is unref()'d so it never
+ * keeps the process alive on its own.
  *
  * @param {{ config, logger, livekit, roomRegistry, roomService, isRoomMissingError }} deps
  * @returns {{ start: () => void, stop: () => void, sweepEmptyRooms: () => Promise<void> }}
@@ -20,14 +17,9 @@ export function createCleanupLoop({
     let timer = null;
 
     /**
-     * Single sweep pass. Iterates all registered rooms and:
-     * 1. Syncs their current participant list from LiveKit
-     * 2. Skips rooms with active participants
-     * 3. Deletes rooms that have been empty longer than roomEmptyTtlMs
-     * 4. Handles "room already gone" errors gracefully by deregistering locally
-     *
-     * Errors during participant sync or deletion are logged but never re-thrown,
-     * so one bad room never blocks cleanup of other rooms.
+     * One sweep pass: sync participants, delete rooms empty past the TTL, and
+     * deregister rooms already gone from LiveKit. Errors are logged but never
+     * re-thrown, so one bad room can't block cleanup of the others.
      *
      * @returns {Promise<void>}
      */
@@ -97,11 +89,7 @@ export function createCleanupLoop({
         }
     }
 
-    /**
-     * Starts the periodic sweep timer.
-     * Safe to call multiple times — but calling start() twice will leak a timer.
-     * Call stop() first if restarting.
-     */
+    /** Starts the sweep timer. Calling start() twice leaks a timer — stop() first to restart. */
     function start() {
         timer = setInterval(() => {
             void sweepEmptyRooms();
@@ -110,9 +98,7 @@ export function createCleanupLoop({
         timer.unref?.();
     }
 
-    /**
-     * Stops the cleanup timer. Safe to call even if never started.
-     */
+    /** Stops the timer. Safe to call even if never started. */
     function stop() {
         if (timer) {
             clearInterval(timer);
