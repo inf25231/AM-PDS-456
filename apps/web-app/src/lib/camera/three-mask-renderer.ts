@@ -1,54 +1,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { CameraEffectsState } from '$lib/camera/effects';
-import { FACE_OVAL_INDICES } from 'camera-core';
+import { FACE_OVAL_INDICES, computeCoverTransform, averagePoint, getBBox } from 'camera-core';
 import type { FaceLandmarkerResult } from '$lib/camera/tracking';
 
 type Landmark = { x: number; y: number; z: number };
-
-type MappedPoint = readonly [x: number, y: number, z: number];
-
-function computeCoverTransform(
-  videoWidth: number,
-  videoHeight: number,
-  displayWidth: number,
-  displayHeight: number
-) {
-  if (!videoWidth || !videoHeight || !displayWidth || !displayHeight) {
-    return { scale: 1, offsetX: 0, offsetY: 0 };
-  }
-
-  const scale = Math.max(displayWidth / videoWidth, displayHeight / videoHeight);
-  return {
-    scale,
-    offsetX: (displayWidth - videoWidth * scale) / 2,
-    offsetY: (displayHeight - videoHeight * scale) / 2
-  };
-}
-
-function averagePoint(points: MappedPoint[], indices: readonly number[]) {
-  let count = 0;
-  let totalX = 0;
-  let totalY = 0;
-  let totalZ = 0;
-
-  for (const index of indices) {
-    const point = points[index];
-    if (!point) {
-      continue;
-    }
-    count += 1;
-    totalX += point[0];
-    totalY += point[1];
-    totalZ += point[2];
-  }
-
-  if (count === 0) {
-    return [0, 0, 0] as const;
-  }
-
-  return [totalX / count, totalY / count, totalZ / count] as const;
-}
 
 /**
  * Head rotation from MediaPipe's own solved face-transform matrix
@@ -92,29 +48,18 @@ function normalizeBlendshapeName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function getBBox(points: MappedPoint[], indices: readonly number[]) {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-
-  for (const index of indices) {
-    const point = points[index];
-    if (!point) {
-      continue;
-    }
-    minX = Math.min(minX, point[0]);
-    minY = Math.min(minY, point[1]);
-    maxX = Math.max(maxX, point[0]);
-    maxY = Math.max(maxY, point[1]);
-  }
-
-  if (!Number.isFinite(minX)) {
-    return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
-  }
-
-  return { minX, minY, maxX, maxY };
-}
+// Rendering the mask at the camera's full native resolution (up to 1920x1080
+// for the "1080p" quality preset) is unnecessarily expensive: the result is
+// always downscaled back into the 2D composition canvas via drawImage, and a
+// face mask overlay doesn't need per-pixel sharpness. Capping the internal
+// WebGL render-buffer's longest edge keeps GPU fragment-shader cost bounded
+// (fill-rate scales with pixel count) regardless of camera quality, which
+// matters a lot on mobile GPUs that are already busy running MediaPipe's
+// face-landmark inference concurrently. The orthographic camera's projection
+// stays mapped to the full logical video-pixel space (see `resize()`), so
+// this only affects the actual pixel density of the render target, not the
+// mask's position/scale math.
+const MAX_RENDER_DIMENSION = 640;
 
 export class ThreeMaskRenderer {
   private readonly renderer: THREE.WebGLRenderer;
@@ -138,7 +83,10 @@ export class ThreeMaskRenderer {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
-      antialias: true
+      // Antialiasing roughly doubles fragment-shader cost for a marginal
+      // visual gain on what's ultimately a small, video-composited overlay --
+      // not worth it on mobile GPUs already busy with MediaPipe inference.
+      antialias: false
     });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.setPixelRatio(1);
@@ -177,7 +125,16 @@ export class ThreeMaskRenderer {
     this.width = nextWidth;
     this.height = nextHeight;
 
-    this.renderer.setSize(this.width, this.height, false);
+    // Keep the camera's projection mapped to the full logical (video-pixel)
+    // space so all the mask position/scale math elsewhere stays in those
+    // coordinates, but cap the actual WebGL render-buffer resolution -- the
+    // aspect ratio is preserved so nothing looks stretched, it's just fewer
+    // pixels for the fragment shader to fill.
+    const downscale = Math.min(1, MAX_RENDER_DIMENSION / Math.max(this.width, this.height));
+    const renderWidth = Math.max(1, Math.round(this.width * downscale));
+    const renderHeight = Math.max(1, Math.round(this.height * downscale));
+
+    this.renderer.setSize(renderWidth, renderHeight, false);
     this.camera.left = 0;
     this.camera.right = this.width;
     this.camera.top = this.height;
