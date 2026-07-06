@@ -32,6 +32,14 @@ pnpm check
 
 This runs the project checks for all workspace packages.
 
+## Lint & Format
+
+```bash
+pnpm lint          # ESLint (JS/TS/Svelte)
+pnpm format        # Prettier — write formatting fixes
+pnpm format:check  # Prettier — check only, no writes
+```
+
 ## Run The Web App
 
 Start the web application in development mode:
@@ -70,10 +78,17 @@ Preview the production web build locally:
 pnpm --filter web-app preview
 ```
 
+Run signaling-server tests:
+
+```bash
+pnpm --filter signaling-server test
+```
+
 ## Typical Local Flow
 
 ```bash
 pnpm install
 pnpm check
+pnpm lint
 pnpm web:dev
 ```
