@@ -14,7 +14,7 @@
     let { children }: Props = $props();
 </script>
 
-<div class="controls">
+<div class="controls" aria-label="Media controls">
     {@render children?.()}
 </div>
 
@@ -22,10 +22,11 @@
     .controls {
         position: absolute;
         left: 50%;
-        bottom: 1.5rem;
+        bottom: var(--control-corner-offset);
         transform: translateX(-50%);
         z-index: 20;
         display: flex;
-        gap: 0.75rem;
+        align-items: center;
+        gap: var(--control-gap);
     }
 </style>

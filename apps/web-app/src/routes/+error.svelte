@@ -21,15 +21,10 @@
 <style>
     @import "$lib/styles/shared-ui.css";
 
-    :global(html),
-    :global(body) {
-        overflow: hidden;
-    }
-
     .error-page {
-        height: 100dvh;
+        min-height: 100dvh;
         box-sizing: border-box;
-        overflow: hidden;
+        overflow: auto;
         display: grid;
         place-items: center;
         padding: 2rem;

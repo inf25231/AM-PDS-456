@@ -20,16 +20,11 @@
 
 <style>
   .banner {
-    position: absolute;
-    top: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
     margin: 0;
     padding: 0.55rem 0.75rem;
     border-radius: 10px;
     font-weight: 600;
-    z-index: 40;
-    max-width: min(92vw, 700px);
+    max-width: min(90vw, 480px);
     text-align: center;
   }
 

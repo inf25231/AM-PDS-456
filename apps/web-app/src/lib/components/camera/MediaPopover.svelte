@@ -1,14 +1,29 @@
+<!--
+    MediaPopover.svelte
+
+    Minimal popover primitive: a pill toggle button + a floating panel
+    positioned relative to it.
+
+    Knows nothing about where it sits on the page — the parent is responsible
+    for placement (e.g. Actions.svelte positions it in the top-right corner).
+
+    Use `showToggle={false}` to render only the panel and drive its visibility
+    externally via the `open` prop.
+-->
 <script lang="ts">
 	import type { Snippet } from "svelte";
 	import { scale } from "svelte/transition";
-	import triggerOpenIcon from "$lib/images/settings.svg";
-	import triggerCloseIcon from "$lib/images/x-close.svg";
+	import PillButton from "./PillButton.svelte";
+	import ToggleIcon from "./ToggleIcon.svelte";
 
 	type Props = {
 		children?: Snippet;
 		panelId?: string;
 		open?: boolean;
 		showToggle?: boolean;
+		panelClass?: string;
+		openIcon?: string;
+		closeIcon?: string;
 	};
 
 	let {
@@ -16,6 +31,9 @@
 		panelId = "camera-popover-panel",
 		open,
 		showToggle = true,
+		panelClass = "",
+		openIcon = "",
+		closeIcon = "",
 	}: Props = $props();
 
 	let isOpen = $state(false);
@@ -26,31 +44,28 @@
 	}
 </script>
 
-<div class="popover-anchor" data-inline={!showToggle}>
+<div class="popover-anchor">
 	{#if showToggle}
-	<button
-		class="popover-toggle"
-		aria-label={panelOpen ? "Close menu" : "Open menu"}
-		aria-expanded={panelOpen}
-		aria-controls={panelId}
-		onclick={handleToggle}
-	>
-		<span class:icon-layer={true} class:icon-layer-visible={!panelOpen}>
-			<img class="popover-icon" src={triggerOpenIcon} alt="Open menu" />
-		</span>
-
-		<span class:icon-layer={true} class:icon-layer-visible={panelOpen}>
-			<img class="popover-icon" src={triggerCloseIcon} alt="Close menu" />
-		</span>
-	</button>
+		<PillButton
+				iconOnly
+				ariaLabel={panelOpen ? "Close menu" : "Open menu"}
+				ariaExpanded={panelOpen}
+				ariaControls={panelId}
+				onclick={handleToggle}
+		>
+			<ToggleIcon
+					active={panelOpen}
+					activeSrc={closeIcon}
+					inactiveSrc={openIcon}
+			/>
+		</PillButton>
 	{/if}
 
 	{#if panelOpen}
-		{#if showToggle}
 		<div
-			id={panelId}
-			class="popover-panel"
-			transition:scale={{ duration: 220, start: 0.94 }}
+				id={panelId}
+				class={`popover-panel ${panelClass}`.trim()}
+				transition:scale={{ duration: 220, start: 0.94 }}
 		>
 			{#if children}
 				{@render children()}
@@ -58,50 +73,19 @@
 				<div class="popover-placeholder">Popover menu</div>
 			{/if}
 		</div>
-		{:else}
-			{#if children}
-				{@render children()}
-			{:else}
-				<div class="popover-placeholder">Popover menu</div>
-			{/if}
-		{/if}
 	{/if}
 </div>
 
 <style>
+	/* Anchor: relative — so the panel can position itself against the trigger.
+       Owns no page-level positioning. */
 	.popover-anchor {
-		position: absolute;
-		top: 1.5rem;
-		right: 1.5rem;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.7rem;
-		z-index: 30;
-	}
-
-	.popover-anchor[data-inline="true"] {
-		position: static;
-		display: contents;
-	}
-
-	.popover-toggle {
-		width: 48px;
-		height: 48px;
-		border: 0;
-		border-radius: 999px;
-		padding: 0;
-		background: rgba(0, 0, 0, 0.65);
-		color: white;
-		font: inherit;
-		cursor: pointer;
-		backdrop-filter: blur(6px);
-		display: grid;
-		place-items: center;
 		position: relative;
-		overflow: hidden;
+		display: inline-flex;
+		align-items: center;
 	}
 
+	/* Cross-fade between open / close icons inside the toggle */
 	.icon-layer {
 		position: absolute;
 		inset: 0;
@@ -124,28 +108,32 @@
 		filter: invert(1);
 	}
 
+	/* Floating panel — anchored to the trigger via the .popover-anchor */
 	.popover-panel {
-		min-width: 260px;
-		min-height: 160px;
-		max-width: min(340px, calc(100vw - 2rem));
+		position: absolute;
+		top: calc(100% + 0.7rem);
+		right: 0;
+		min-width: 320px;
+		max-width: min(440px, calc(100vw - 2rem));
 		max-height: calc(100dvh - 6.5rem);
-		border-radius: 18px;
-		padding: 1rem;
-		box-sizing: border-box;
-		background: rgba(0, 0, 0, 0.82);
-		border: 1px solid rgba(255, 255, 255, 0.14);
-		color: rgba(255, 255, 255, 0.9);
-		backdrop-filter: blur(16px);
+		border-radius: var(--surface-radius);
+		padding: var(--surface-padding);
+		background: var(--surface-bg);
+		border: 1px solid var(--surface-border);
+		color: var(--text-primary);
+		backdrop-filter: var(--surface-blur);
+		-webkit-backdrop-filter: var(--surface-blur);
 		box-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
 		transform-origin: top right;
 		overflow: auto;
 		overscroll-behavior: contain;
 		-webkit-overflow-scrolling: touch;
+		z-index: 30;
+		box-sizing: border-box;
 	}
 
 	.popover-placeholder {
 		width: 100%;
-		height: 100%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -158,9 +146,9 @@
 	}
 
 	@media (max-width: 640px) {
-		.popover-anchor {
-			top: 0.75rem;
-			right: 0.75rem;
+		.popover-icon {
+			width: 26px;
+			height: 26px;
 		}
 
 		.popover-panel {
