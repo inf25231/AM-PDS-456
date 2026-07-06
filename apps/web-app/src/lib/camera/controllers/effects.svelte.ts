@@ -551,7 +551,7 @@ export class EffectsController {
     this.modelRenderer?.dispose();
     this.modelRenderer = null;
     try {
-      this.modelRenderer = new ThreeMaskRenderer(canvas, { lowPower: this.isMobileViewport });
+      this.modelRenderer = new ThreeMaskRenderer(canvas);
     } catch (error) {
       this.opts.onError?.(getMediaErrorMessage('camera', error));
     }
