@@ -1,18 +1,18 @@
-export type WebcamVisibility = "visible" | "hidden";
+export type WebcamVisibility = 'visible' | 'hidden';
 
 /**
  * Background fill. Either:
  *   - "none"  : transparent / no fill (default — webcam shows through)
  *   - "image" : an uploaded picture
  */
-export type BackgroundKind = "none" | "image";
+export type BackgroundKind = 'none' | 'image';
 
 export interface BackgroundState {
-    kind: BackgroundKind;
-    /** Object URL for the uploaded image (only meaningful when kind === "image"). */
-    imageUrl: string | null;
-    /** Original filename for display in the UI. */
-    imageName: string;
+  kind: BackgroundKind;
+  /** Object URL for the uploaded image (only meaningful when kind === "image"). */
+  imageUrl: string | null;
+  /** Original filename for display in the UI. */
+  imageName: string;
 }
 
 /**
@@ -20,17 +20,17 @@ export interface BackgroundState {
  * face landmarks; ARKit-style blendshapes drive its facial morphs.
  */
 export interface ModelState {
-    enabled: boolean;
-    url: string | null;
-    name: string;
-    /** Size relative to the detected face width. */
-    scale: number;
-    /** Horizontal offset, in fractions of face width. */
-    offsetX: number;
-    /** Vertical offset, in fractions of face height. */
-    offsetY: number;
-    /** Extra yaw offset in degrees for orientation tuning. */
-    rotationY: number;
+  enabled: boolean;
+  url: string | null;
+  name: string;
+  /** Size relative to the detected face width. */
+  scale: number;
+  /** Horizontal offset, in fractions of face width. */
+  offsetX: number;
+  /** Vertical offset, in fractions of face height. */
+  offsetY: number;
+  /** Extra yaw offset in degrees for orientation tuning. */
+  rotationY: number;
 }
 
 /**
@@ -40,19 +40,19 @@ export interface ModelState {
  * baked into the renderer.
  */
 export interface CutoutsState {
-    enabled: boolean;
+  enabled: boolean;
 }
 
 export interface CameraEffectsState {
-    /** Hide the raw webcam frame while keeping tracking + effects running. */
-    webcamVisibility: WebcamVisibility;
+  /** Hide the raw webcam frame while keeping tracking + effects running. */
+  webcamVisibility: WebcamVisibility;
 
-    /** Debug overlay showing tracked landmarks. */
-    showLandmarksDebug: boolean;
+  /** Debug overlay showing tracked landmarks. */
+  showLandmarksDebug: boolean;
 
-    background: BackgroundState;
-    model: ModelState;
-    cutouts: CutoutsState;
+  background: BackgroundState;
+  model: ModelState;
+  cutouts: CutoutsState;
 }
 
 // ----------------------------------------------------------------------
@@ -60,44 +60,44 @@ export interface CameraEffectsState {
 // ----------------------------------------------------------------------
 
 function clamp(value: number, min: number, max: number) {
-    return Math.min(max, Math.max(min, value));
+  return Math.min(max, Math.max(min, value));
 }
 
 export function createDefaultCameraEffectsState(): CameraEffectsState {
-    return {
-        webcamVisibility: "visible",
-        showLandmarksDebug: false,
-        background: {
-            kind: "none",
-            imageUrl: null,
-            imageName: "",
-        },
-        model: {
-            enabled: false,
-            url: null,
-            name: "",
-            scale: 1,
-            offsetX: 0,
-            offsetY: 0,
-            rotationY: 0,
-        },
-        cutouts: {
-            enabled: false,
-        },
-    };
+  return {
+    webcamVisibility: 'visible',
+    showLandmarksDebug: false,
+    background: {
+      kind: 'none',
+      imageUrl: null,
+      imageName: ''
+    },
+    model: {
+      enabled: false,
+      url: null,
+      name: '',
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      rotationY: 0
+    },
+    cutouts: {
+      enabled: false
+    }
+  };
 }
 
 export function normalizeEffectsState(state: CameraEffectsState): CameraEffectsState {
-    return {
-        ...state,
-        model: {
-            ...state.model,
-            scale:   clamp(state.model.scale,   0.1, 5),
-            offsetX: clamp(state.model.offsetX, -1, 1),
-            offsetY: clamp(state.model.offsetY, -1, 1),
-            rotationY: clamp(state.model.rotationY, -180, 180),
-        },
-    };
+  return {
+    ...state,
+    model: {
+      ...state.model,
+      scale: clamp(state.model.scale, 0.1, 5),
+      offsetX: clamp(state.model.offsetX, -1, 1),
+      offsetY: clamp(state.model.offsetY, -1, 1),
+      rotationY: clamp(state.model.rotationY, -180, 180)
+    }
+  };
 }
 
 // ----------------------------------------------------------------------
@@ -109,23 +109,20 @@ export function normalizeEffectsState(state: CameraEffectsState): CameraEffectsS
  * URL to avoid leaks. Pass `file = null` to clear the image (background
  * resets to "none").
  */
-export function setBackgroundImage(
-    previous: BackgroundState,
-    file: File | null,
-): BackgroundState {
-    if (previous.imageUrl) {
-        URL.revokeObjectURL(previous.imageUrl);
-    }
+export function setBackgroundImage(previous: BackgroundState, file: File | null): BackgroundState {
+  if (previous.imageUrl) {
+    URL.revokeObjectURL(previous.imageUrl);
+  }
 
-    if (!file) {
-        return { kind: "none", imageUrl: null, imageName: "" };
-    }
+  if (!file) {
+    return { kind: 'none', imageUrl: null, imageName: '' };
+  }
 
-    return {
-        kind: "image",
-        imageUrl: URL.createObjectURL(file),
-        imageName: file.name,
-    };
+  return {
+    kind: 'image',
+    imageUrl: URL.createObjectURL(file),
+    imageName: file.name
+  };
 }
 
 // ----------------------------------------------------------------------
@@ -136,27 +133,24 @@ export function setBackgroundImage(
  * Apply an uploaded GLB/GLTF file as the model. Revokes any previous
  * object URL. Pass `file = null` to clear the model entirely.
  */
-export function setModelFile(
-    previous: ModelState,
-    file: File | null,
-): ModelState {
-    if (previous.url) {
-        URL.revokeObjectURL(previous.url);
-    }
+export function setModelFile(previous: ModelState, file: File | null): ModelState {
+  if (previous.url) {
+    URL.revokeObjectURL(previous.url);
+  }
 
-    if (!file) {
-        return {
-            ...previous,
-            enabled: false,
-            url: null,
-            name: "",
-        };
-    }
-
+  if (!file) {
     return {
-        ...previous,
-        enabled: true,
-        url: URL.createObjectURL(file),
-        name: file.name,
+      ...previous,
+      enabled: false,
+      url: null,
+      name: ''
     };
+  }
+
+  return {
+    ...previous,
+    enabled: true,
+    url: URL.createObjectURL(file),
+    name: file.name
+  };
 }

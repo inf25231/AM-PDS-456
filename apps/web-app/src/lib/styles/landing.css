@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 /* ── skip link (accessibility) ────────────── */
 .skip-link {
   position: fixed;
@@ -100,7 +100,10 @@
   letter-spacing: 0.04em;
   cursor: pointer;
   padding: 0.3rem 0.45rem;
-  transition: color 220ms ease, transform 220ms ease, outline-color 220ms ease;
+  transition:
+    color 220ms ease,
+    transform 220ms ease,
+    outline-color 220ms ease;
   white-space: nowrap;
   text-decoration: none;
   border-radius: 4px;
@@ -651,7 +654,9 @@
   font: inherit;
   font-size: 0.84rem;
   cursor: pointer;
-  transition: background 180ms ease, border-color 180ms ease;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
   justify-self: start;
 }
 
@@ -872,7 +877,9 @@
 .reveal {
   opacity: 0;
   transform: translateY(24px);
-  transition: opacity 450ms ease, transform 450ms ease;
+  transition:
+    opacity 450ms ease,
+    transform 450ms ease;
 }
 
 .reveal.visible {
@@ -951,7 +958,3 @@
     flex-direction: column;
   }
 }
-
-
-
-

@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
   push:
     branches:
-        - main
+      - main
     paths:
-      - 'apps/signaling-server/**'  # trigger only when files in signaling server root change
+      - 'apps/signaling-server/**' # trigger only when files in signaling server root change
       - '.github/workflows/deploy-signaling.yml'
 
 concurrency:
@@ -50,7 +50,7 @@ jobs:
             LIVEKIT_URL=${{ secrets.LIVEKIT_URL }}
             CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
             EOF
-            
+
             if pm2 describe signaling >/dev/null 2>&1; then
               pm2 restart signaling --update-env
             else

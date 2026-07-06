@@ -7,17 +7,17 @@
  * - keep persisted device ids valid when hardware changes
  */
 export type DeviceOption = {
-    value: string;
-    label: string;
+  value: string;
+  label: string;
 };
 
-type TrackKind = "video" | "audio";
+type TrackKind = 'video' | 'audio';
 
 function mapDeviceOptions(devices: MediaDeviceInfo[], labelPrefix: string): DeviceOption[] {
-    return devices.map((device, index) => ({
-        value: device.deviceId,
-        label: device.label || `${labelPrefix} ${index + 1}`,
-    }));
+  return devices.map((device, index) => ({
+    value: device.deviceId,
+    label: device.label || `${labelPrefix} ${index + 1}`
+  }));
 }
 
 /**
@@ -26,33 +26,33 @@ function mapDeviceOptions(devices: MediaDeviceInfo[], labelPrefix: string): Devi
  * Labels may still be generic until the user has granted media permissions.
  */
 export async function enumerateMediaDeviceOptions() {
-    if (!navigator.mediaDevices?.enumerateDevices) {
-        return {
-            videoInputs: [] as DeviceOption[],
-            audioInputs: [] as DeviceOption[],
-        };
-    }
-
-    const devices = await navigator.mediaDevices.enumerateDevices();
+  if (!navigator.mediaDevices?.enumerateDevices) {
     return {
-        videoInputs: mapDeviceOptions(
-            devices.filter((device) => device.kind === "videoinput"),
-            "Camera",
-        ),
-        audioInputs: mapDeviceOptions(
-            devices.filter((device) => device.kind === "audioinput"),
-            "Microphone",
-        ),
+      videoInputs: [] as DeviceOption[],
+      audioInputs: [] as DeviceOption[]
     };
+  }
+
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return {
+    videoInputs: mapDeviceOptions(
+      devices.filter((device) => device.kind === 'videoinput'),
+      'Camera'
+    ),
+    audioInputs: mapDeviceOptions(
+      devices.filter((device) => device.kind === 'audioinput'),
+      'Microphone'
+    )
+  };
 }
 
 /**
  * Reads the active device id from the current stream track settings.
  */
 export function getStreamTrackDeviceId(stream: MediaStream | null, kind: TrackKind) {
-    const track = kind === "video" ? stream?.getVideoTracks()?.[0] : stream?.getAudioTracks()?.[0];
-    const deviceId = track?.getSettings().deviceId;
-    return typeof deviceId === "string" ? deviceId : "";
+  const track = kind === 'video' ? stream?.getVideoTracks()?.[0] : stream?.getAudioTracks()?.[0];
+  const deviceId = track?.getSettings().deviceId;
+  return typeof deviceId === 'string' ? deviceId : '';
 }
 
 /**
@@ -62,13 +62,13 @@ export function getStreamTrackDeviceId(stream: MediaStream | null, kind: TrackKi
  * track device id when possible. This avoids broken selections after device changes.
  */
 export function normalizeSelectedDeviceId(
-    selectedDeviceId: string,
-    options: DeviceOption[],
-    fallbackDeviceId = "",
+  selectedDeviceId: string,
+  options: DeviceOption[],
+  fallbackDeviceId = ''
 ) {
-    if (options.some((option) => option.value === selectedDeviceId)) {
-        return selectedDeviceId;
-    }
+  if (options.some((option) => option.value === selectedDeviceId)) {
+    return selectedDeviceId;
+  }
 
-    return options.some((option) => option.value === fallbackDeviceId) ? fallbackDeviceId : "";
+  return options.some((option) => option.value === fallbackDeviceId) ? fallbackDeviceId : '';
 }

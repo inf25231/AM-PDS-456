@@ -4,11 +4,10 @@
  * @returns {boolean} True if the message looks like a missing-room error.
  */
 export function isRoomMissingError(error) {
-    const message = String(error?.message || '').toLowerCase();
-    return (
-        message.includes('not found') ||
-        message.includes('room does not exist') ||
-        message.includes('unknown room')
-    );
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('not found') ||
+    message.includes('room does not exist') ||
+    message.includes('unknown room')
+  );
 }
-

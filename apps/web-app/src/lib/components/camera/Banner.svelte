@@ -6,14 +6,15 @@
     tone?: BannerTone;
   };
 
-  let {
-    message = '',
-    tone = 'neutral'
-  }: Props = $props();
+  let { message = '', tone = 'neutral' }: Props = $props();
 </script>
 
 {#if message}
-  <p class:banner={true} class:banner-neutral={tone === 'neutral'} class:banner-error={tone === 'error'}>
+  <p
+    class:banner={true}
+    class:banner-neutral={tone === 'neutral'}
+    class:banner-error={tone === 'error'}
+  >
     {message}
   </p>
 {/if}
@@ -40,4 +41,3 @@
     border: 1px solid rgba(248, 113, 113, 0.42);
   }
 </style>
-
