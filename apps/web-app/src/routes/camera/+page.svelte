@@ -190,11 +190,11 @@
       return;
     }
 
+    effects.init();
     effects.attachElements({
       video: videoEl,
       previewContainer: previewContainerEl
     });
-    effects.init();
     effects.syncAll();
 
     // Dev-only debug handle. Never expose controllers on window in production.
