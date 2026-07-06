@@ -70,7 +70,10 @@ export class ThreeMaskRenderer {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
-      antialias: true
+      // Disabled: WebGL antialiasing competes with MediaPipe's GPU face
+      // inference for GPU budget, causing severe fps drops on mobile with
+      // negligible visible benefit for a small overlay mask.
+      antialias: false
     });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.setPixelRatio(1);
