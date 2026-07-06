@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { CameraEffectsState } from '$lib/camera/effects';
-import { FACE_OVAL_INDICES, computeCoverTransform, averagePoint, getBBox } from 'camera-core';
+import {
+  FACE_OVAL_INDICES,
+  computeCoverTransform,
+  averagePoint,
+  getBBox,
+  computeDownscaledSize
+} from 'camera-core';
 import type { FaceLandmarkerResult } from '$lib/camera/tracking';
 
 type Landmark = { x: number; y: number; z: number };
@@ -130,9 +136,11 @@ export class ThreeMaskRenderer {
     // coordinates, but cap the actual WebGL render-buffer resolution -- the
     // aspect ratio is preserved so nothing looks stretched, it's just fewer
     // pixels for the fragment shader to fill.
-    const downscale = Math.min(1, MAX_RENDER_DIMENSION / Math.max(this.width, this.height));
-    const renderWidth = Math.max(1, Math.round(this.width * downscale));
-    const renderHeight = Math.max(1, Math.round(this.height * downscale));
+    const { width: renderWidth, height: renderHeight } = computeDownscaledSize(
+      this.width,
+      this.height,
+      MAX_RENDER_DIMENSION
+    );
 
     this.renderer.setSize(renderWidth, renderHeight, false);
     this.camera.left = 0;
