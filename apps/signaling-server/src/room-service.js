@@ -1,20 +1,13 @@
 /**
- * Creates the room service — a high-level orchestration layer that combines
- * LiveKit API calls with local registry state updates.
- *
- * This is the correct place for logic that requires both a LiveKit operation
- * AND a registry update. Route handlers should call this service, not livekit directly.
- *
- * @param {{ livekit: ReturnType<import('./livekit-admin.js').createLivekitAdmin>, roomRegistry: ReturnType<import('./room-registry.js').createRoomRegistry> }} deps
+ * Room service: combines LiveKit calls with local registry updates.
+ * Route handlers should go through here, not call livekit directly.
  */
 export function createRoomService({livekit, roomRegistry}) {
+    /** Normalize request body into { name, @displayName, @metadata }. */
     function parseRoomPayload(input = {}) {
         const name = livekit.normalizeRoomName(input.name);
-
-        // Use the given displayName, otherwise fall back to the room name.
         const displayName = String(input.displayName || name).trim() || name;
 
-        // Only use the incoming metadata if it is actually an object.
         let baseMetadata = {};
         if (typeof input.metadata === 'object' && input.metadata) {
             baseMetadata = input.metadata;
@@ -32,12 +25,14 @@ export function createRoomService({livekit, roomRegistry}) {
         };
     }
 
+    /** Refresh a room's participant count from LiveKit and return the list. */
     async function syncRoomParticipants(roomName) {
         const participants = await livekit.listParticipants(roomName);
         roomRegistry.setParticipants(roomName, participants.length);
         return participants;
     }
 
+    /** Pull every room from LiveKit into the registry. */
     async function syncAllRooms() {
         const rooms = await livekit.listRooms();
         for (const room of rooms) {
@@ -51,6 +46,7 @@ export function createRoomService({livekit, roomRegistry}) {
         }
     }
 
+    /** Store a LiveKit room in the registry, with optional @overrides. */
     function trackRoomFromLivekit(room, participants, overrides = {}) {
         return roomRegistry.ensureRoom(room.name, {
             displayName: overrides.displayName || room.metadata?.displayName || room.name,
@@ -59,6 +55,7 @@ export function createRoomService({livekit, roomRegistry}) {
         });
     }
 
+    /** Return @requestedUsername, or append -2, -3, ... if it's already taken. */
     function buildUniqueUsername(requestedUsername, participants = []) {
         const existingNames = new Set(
             participants.map((participant) =>
@@ -86,4 +83,3 @@ export function createRoomService({livekit, roomRegistry}) {
         buildUniqueUsername
     };
 }
-

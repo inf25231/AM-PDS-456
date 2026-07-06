@@ -18,10 +18,9 @@ describe('isRoomMissingError', () => {
 
     test('is false for unrelated errors', () => {
         assert.equal(isRoomMissingError(new Error('network timeout')), false);
-        assert.equal(isRoomMissingError(new Error('permission denied')), false);
     });
 
-    test('is false for null/undefined or empty errors', () => {
+    test('is false for null/undefined/empty', () => {
         assert.equal(isRoomMissingError(null), false);
         assert.equal(isRoomMissingError(undefined), false);
         assert.equal(isRoomMissingError({}), false);

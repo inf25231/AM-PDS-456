@@ -32,18 +32,18 @@ describe('livekit-admin.normalizeRoomName', () => {
         assert.equal(normalize('Math 101'), 'math-101');
     });
 
-    test('collapses multiple spaces into a single dash', () => {
+    test('collapses multiple spaces to one dash', () => {
         const normalize = getNormalize();
         assert.equal(normalize('a   b'), 'a-b');
     });
 
-    test('removes characters that are not letters, digits, dash or underscore', () => {
+    test('strips disallowed characters', () => {
         const normalize = getNormalize();
         assert.equal(normalize('Math#101!'), 'math101');
         assert.equal(normalize('room_1-a'), 'room_1-a');
     });
 
-    test('returns an empty string for empty or nullish input', () => {
+    test('returns empty for empty/nullish input', () => {
         const normalize = getNormalize();
         assert.equal(normalize(''), '');
         assert.equal(normalize(null), '');

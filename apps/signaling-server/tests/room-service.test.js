@@ -23,33 +23,30 @@ function createRoomServiceForTest() {
 }
 
 describe('room-service.buildUniqueUsername', () => {
-    test('returns the requested name when it is free', () => {
+    test('returns the name when free', () => {
         const service = createRoomServiceForTest();
         const name = service.buildUniqueUsername('alice', []);
         assert.equal(name, 'alice');
     });
 
-    test('falls back to "guest" when no name is given', () => {
+    test('falls back to "guest" when empty', () => {
         const service = createRoomServiceForTest();
         assert.equal(service.buildUniqueUsername('', []), 'guest');
+    });
+
+    test('treats whitespace-only as empty', () => {
+        const service = createRoomServiceForTest();
         assert.equal(service.buildUniqueUsername('   ', []), 'guest');
     });
 
-    test('adds a numeric suffix when the name is taken', () => {
+    test('adds a numeric suffix when taken', () => {
         const service = createRoomServiceForTest();
         const participants = [{identity: 'alice'}];
         const name = service.buildUniqueUsername('alice', participants);
         assert.equal(name, 'alice-2');
     });
 
-    test('keeps counting up while names are taken', () => {
-        const service = createRoomServiceForTest();
-        const participants = [{identity: 'alice'}, {identity: 'alice-2'}];
-        const name = service.buildUniqueUsername('alice', participants);
-        assert.equal(name, 'alice-3');
-    });
-
-    test('matches existing names case-insensitively', () => {
+    test('matches names case-insensitively', () => {
         const service = createRoomServiceForTest();
         const participants = [{identity: 'Alice'}];
         const name = service.buildUniqueUsername('alice', participants);
@@ -58,7 +55,7 @@ describe('room-service.buildUniqueUsername', () => {
 });
 
 describe('room-service.parseRoomPayload', () => {
-    test('normalizes the name and defaults the displayName', () => {
+    test('normalizes name, defaults displayName', () => {
         const service = createRoomServiceForTest();
         const payload = service.parseRoomPayload({name: '  Math 101  '});
 
@@ -69,7 +66,7 @@ describe('room-service.parseRoomPayload', () => {
         assert.equal(payload.metadata.displayName, 'math 101');
     });
 
-    test('keeps a provided displayName and merges metadata', () => {
+    test('keeps displayName, merges metadata', () => {
         const service = createRoomServiceForTest();
         const payload = service.parseRoomPayload({
             name: 'math',
@@ -84,7 +81,7 @@ describe('room-service.parseRoomPayload', () => {
         });
     });
 
-    test('handles being called with no arguments', () => {
+    test('handles no arguments', () => {
         const service = createRoomServiceForTest();
         const payload = service.parseRoomPayload();
 

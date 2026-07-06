@@ -95,7 +95,7 @@ after(async () => {
 });
 
 describe('routes (integration)', () => {
-    test('GET /health returns ok with a timestamp', async () => {
+    test('GET /health returns ok', async () => {
         const res = await fetch(`${baseUrl}/health`);
         assert.equal(res.status, 200);
         const body = await res.json();
@@ -103,7 +103,7 @@ describe('routes (integration)', () => {
         assert.ok(typeof body.timestamp === 'string');
     });
 
-    test('GET /status returns an empty registry initially', async () => {
+    test('GET /status is empty initially', async () => {
         const res = await fetch(`${baseUrl}/status`);
         assert.equal(res.status, 200);
         const body = await res.json();
@@ -112,7 +112,7 @@ describe('routes (integration)', () => {
         assert.deepEqual(body.rooms, []);
     });
 
-    test('POST /rooms/:room/join returns a token for an existing room', async () => {
+    test('POST join returns a token for a known room', async () => {
         const res = await fetch(`${baseUrl}/rooms/math/join`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -126,7 +126,7 @@ describe('routes (integration)', () => {
         assert.equal(body.token, 'fake-jwt-token');
     });
 
-    test('POST /rooms/:room/join returns 404 for an unknown room', async () => {
+    test('POST join returns 404 for unknown room', async () => {
         const res = await fetch(`${baseUrl}/rooms/ghost/join`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -138,7 +138,7 @@ describe('routes (integration)', () => {
         assert.equal(body.error, 'Room not found');
     });
 
-    test('POST /rooms/:room/join returns 400 when username is missing', async () => {
+    test('POST join returns 400 without username', async () => {
         const res = await fetch(`${baseUrl}/rooms/math/join`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},

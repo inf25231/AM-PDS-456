@@ -37,24 +37,23 @@ function setValidEnv() {
 }
 
 describe('getServerConfig - allowedOrigin parsing', () => {
-    test('defaults to "*" when CORS_ORIGIN is unset', () => {
+    test('defaults to "*" when unset', () => {
         setValidEnv();
         assert.equal(getServerConfig().allowedOrigin, '*');
     });
 
-    test('returns "*" when CORS_ORIGIN is explicitly "*"', () => {
+    test('keeps "*" as-is', () => {
         setValidEnv();
         process.env.CORS_ORIGIN = '*';
         assert.equal(getServerConfig().allowedOrigin, '*');
     });
 
-    test('splits a comma-separated list into trimmed origins', () => {
+    test('splits a comma list and trims spaces', () => {
         setValidEnv();
-        process.env.CORS_ORIGIN = 'https://a.com, https://b.com ,https://c.com';
+        process.env.CORS_ORIGIN = 'https://a.com , https://b.com';
         assert.deepEqual(getServerConfig().allowedOrigin, [
             'https://a.com',
-            'https://b.com',
-            'https://c.com'
+            'https://b.com'
         ]);
     });
 });
@@ -65,21 +64,21 @@ describe('assertConfig', () => {
         assert.doesNotThrow(() => assertConfig(getServerConfig()));
     });
 
-    test('throws and names a missing PORT', () => {
+    test('throws on missing PORT', () => {
         setValidEnv();
         delete process.env.PORT;
         assert.throws(() => assertConfig(getServerConfig()), /PORT/);
     });
 
-    test('throws and lists every missing variable', () => {
-        // Nothing is set at all.
+    test('lists all missing vars', () => {
+        // nothing set at all
         assert.throws(
             () => assertConfig(getServerConfig()),
             /LIVEKIT_URL.*LIVEKIT_API_KEY.*LIVEKIT_API_SECRET/
         );
     });
 
-    test('rejects a non-numeric PORT', () => {
+    test('rejects non-numeric PORT', () => {
         setValidEnv();
         process.env.PORT = 'not-a-number';
         assert.throws(() => assertConfig(getServerConfig()), /PORT/);

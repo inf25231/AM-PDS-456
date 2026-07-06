@@ -1,15 +1,7 @@
 /**
- * Registers all HTTP routes onto the Express app.
- *
- * All route handlers follow this contract:
- * - Success: { ok: true, ...data }
- * - Client error: { ok: false, error: string } with appropriate 4xx status
- * - Server error: passed to Express error middleware via next(error)
- *
- * Dependencies are injected to keep this module testable in isolation.
- *
- * @param {import('express').Application} app
- * @param {{ config, logger, livekit, roomRegistry, roomService, isRoomMissingError }} deps
+ * Registers all HTTP routes on the Express app.
+ * Handlers reply { ok: true, ... } on success or { ok: false, error } on failure;
+ * unexpected errors are passed to next(error).
  */
 export function registerRoutes(app, {
     config,
@@ -19,15 +11,12 @@ export function registerRoutes(app, {
     roomService,
     isRoomMissingError
 }) {
-    /** GET /health — Liveness probe. Returns 200 with a timestamp. */
+    /** Health check. */
     app.get('/health', (_req, res) => {
         res.json({ok: true, timestamp: new Date().toISOString()});
     });
 
-    /**
-     * GET /status — Returns the count and list of all locally tracked rooms.
-     * Does NOT call LiveKit — returns in-memory registry state only.
-     */
+    /** Rooms we track locally (no LiveKit call). */
     app.get('/status', (_req, res) => {
         res.json({
             ok: true,
@@ -36,11 +25,7 @@ export function registerRoutes(app, {
         });
     });
 
-    /**
-     * GET /status/connection-quality
-     * Polls LiveKit for live participant connection quality data for all tracked rooms.
-     * This is a slow endpoint — it makes one API call per tracked room.
-     */
+    /** Live connection quality per room. Slow: one LiveKit call per room. */
     app.get('/status/connection-quality', async (_req, res, next) => {
         try {
             const rooms = roomRegistry.list();
@@ -68,11 +53,7 @@ export function registerRoutes(app, {
         }
     });
 
-    /**
-     * GET /rooms
-     * Syncs all rooms from LiveKit into the registry, then returns the full list.
-     * More expensive than GET /status — triggers a full LiveKit API call.
-     */
+    /** Full room list, synced from LiveKit (heavier than /status). */
     app.get('/rooms', async (_req, res, next) => {
         try {
             await roomService.syncAllRooms();
@@ -85,12 +66,7 @@ export function registerRoutes(app, {
         }
     });
 
-    /**
-     * POST /rooms
-     * Creates a new room or returns an existing one with the same name (idempotent).
-     * Body: { name: string, displayName?: string, metadata?: object }
-     * Response 201: { ok: true, room: RoomRecord }
-     */
+    /** Create a room, or reuse an existing one with the same name. */
     app.post('/rooms', async (req, res, next) => {
         try {
             const payload = roomService.parseRoomPayload(req.body || {});
@@ -119,11 +95,7 @@ export function registerRoutes(app, {
         }
     });
 
-    /**
-     * GET /rooms/:roomName
-     * Fetches a single room from LiveKit and syncs it into the registry.
-     * Returns 404 if the room does not exist in LiveKit.
-     */
+    /** Fetch one room from LiveKit and sync it. 404 if it doesn't exist there. */
     app.get('/rooms/:roomName', async (req, res, next) => {
         try {
             const roomName = livekit.normalizeRoomName(req.params.roomName);
@@ -140,30 +112,17 @@ export function registerRoutes(app, {
         }
     });
 
-    /**
-     * PATCH /rooms/:roomName
-     * Updates a room's displayName and/or metadata.
-     * Merges patch fields onto the existing record (does not replace).
-     *
-     * Note: displayName is stored both as a top-level field on the registry record
-     * AND inside the metadata object, because LiveKit only persists the metadata JSON blob.
-     *
-     * Body: { displayName?: string, metadata?: object }
-     */
+    /** Update a room's displayName and/or metadata. */
     app.patch('/rooms/:roomName', async (req, res, next) => {
         try {
             const roomName = livekit.normalizeRoomName(req.params.roomName);
 
-            // Get the current room record, or create an empty one if we don't know it yet.
             let current = roomRegistry.get(roomName);
             if (!current) {
                 current = roomRegistry.ensureRoom(roomName);
             }
 
-            // Decide the new display name, step by step:
-            // 1. use the one from the request body if provided,
-            // 2. otherwise keep the current one,
-            // 3. otherwise fall back to the room name.
+            // pick the new display name: body wins, then current, then room name
             let nextDisplayName = roomName;
             if (req.body?.displayName) {
                 nextDisplayName = req.body.displayName;
@@ -172,7 +131,6 @@ export function registerRoutes(app, {
             }
             nextDisplayName = nextDisplayName.trim() || roomName;
 
-            // Only merge in the request metadata if it is actually an object.
             let patchMetadata = {};
             if (typeof req.body?.metadata === 'object' && req.body?.metadata) {
                 patchMetadata = req.body.metadata;
@@ -208,11 +166,7 @@ export function registerRoutes(app, {
     });
 
 
-    /**
-     * DELETE /rooms/:roomName
-     * Immediately deletes a room from LiveKit and removes it from the registry.
-     * All active participants are disconnected by LiveKit.
-     */
+    /** Delete a room now. LiveKit disconnects everyone still inside. */
     app.delete('/rooms/:roomName', async (req, res, next) => {
         try {
             const roomName = livekit.normalizeRoomName(req.params.roomName);
@@ -226,10 +180,7 @@ export function registerRoutes(app, {
         }
     });
 
-    /**
-     * GET /rooms/:roomName/participants
-     * Returns the current participant list for a room, synced from LiveKit.
-     */
+    /** Current participants of a room, synced from LiveKit. */
     app.get('/rooms/:roomName/participants', async (req, res, next) => {
         try {
             const roomName = livekit.normalizeRoomName(req.params.roomName);
@@ -251,16 +202,9 @@ export function registerRoutes(app, {
     });
 
     /**
-     * Shared logic for issuing a LiveKit join token.
-     * Used by both POST /rooms/:roomName/join and the legacy GET /token.
-     *
-     * Validates inputs, ensures the room exists, syncs participants, assigns a
-     * unique username (numeric suffix on collision), and mints a signed JWT.
-     *
-     * @param {string} rawRoomName - room name from the request (un-normalized)
-     * @param {string} rawUsername - requested username from the request
-     * @returns {Promise<{ ok: true, room, username, token, livekitUrl }
-     *   | { ok: false, status: number, error: string }>}
+     * Shared join logic for POST /rooms/:roomName/join and the legacy GET /token.
+     * Validates input, ensures the room exists, assigns a unique username
+     * (numeric suffix if taken) and mints a signed token.
      */
     async function issueJoinToken(rawRoomName, rawUsername) {
         const roomName = livekit.normalizeRoomName(rawRoomName);
@@ -289,15 +233,7 @@ export function registerRoutes(app, {
         };
     }
 
-    /**
-     * POST /rooms/:roomName/join
-     * Issues a signed LiveKit JWT for a user to join the specified room.
-     * If the requested username is already taken, a numeric suffix is appended.
-     * Returns 404 if the room does not exist.
-     *
-     * Body: { username: string }
-     * Response: { ok: true, room, username, token, livekitUrl }
-     */
+    /** Join a room: returns a signed token. 404 if the room doesn't exist. */
     app.post('/rooms/:roomName/join', async (req, res, next) => {
         try {
             const result = await issueJoinToken(req.params.roomName, req.body?.username);
@@ -318,13 +254,9 @@ export function registerRoutes(app, {
     });
 
     /**
-     * GET /token?room=&username=
-     * Legacy endpoint for backward compatibility with older clients.
-     * Functionally identical to POST /rooms/:roomName/join.
-     *
+     * Old token endpoint, kept for older clients. Same as POST /rooms/:roomName/join.
      * @deprecated Use POST /rooms/:roomName/join instead.
      */
-    // Backward-compatible token endpoint used by older clients.
     app.get('/token', async (req, res, next) => {
         try {
             const result = await issueJoinToken(req.query.room, req.query.username);
@@ -345,9 +277,8 @@ export function registerRoutes(app, {
     });
 
     /**
-     * POST /rooms/:roomName/cleanup
-     * Manually triggers cleanup of an empty room. Returns 409 if the room still has participants.
-     * Safe to call even if the room is already gone from LiveKit (idempotent).
+     * Manually clean up an empty room. 409 if it still has participants.
+     * Safe to call even if the room is already gone from LiveKit.
      */
     app.post('/rooms/:roomName/cleanup', async (req, res, next) => {
         try {
@@ -377,12 +308,7 @@ export function registerRoutes(app, {
         }
     });
 
-    /**
-     * Global Express error handler.
-     * Catches any error passed to next(error) from a route handler.
-     * Always returns 500 — consider adding AppError.statusCode support
-     * if you need to propagate specific 4xx codes from service-layer errors.
-     */
+    /** Catch-all error handler: anything passed to next(error) becomes a 500. */
     app.use((error, _req, res, _next) => {
         logger.error('request_failed', {
             message: error?.message || 'Unknown error'
@@ -394,4 +320,3 @@ export function registerRoutes(app, {
         });
     });
 }
-

@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 
 import {createRoomRegistry} from '../src/room-registry.js';
 
-// The room registry is the in-memory source of truth for room state.
-// These tests cover its pure state logic without touching LiveKit.
+/** Pure state logic of the room registry, no LiveKit involved. */
 describe('room-registry', () => {
     test('starts empty', () => {
         const registry = createRoomRegistry();
@@ -12,7 +11,7 @@ describe('room-registry', () => {
         assert.deepEqual(registry.list(), []);
     });
 
-    test('ensureRoom creates a room with sensible defaults', () => {
+    test('ensureRoom creates a room with defaults', () => {
         const registry = createRoomRegistry();
         const room = registry.ensureRoom('math-101');
 
@@ -26,7 +25,7 @@ describe('room-registry', () => {
         assert.ok(room.updatedAt);
     });
 
-    test('ensureRoom uses the provided patch values', () => {
+    test('ensureRoom applies patch values', () => {
         const registry = createRoomRegistry();
         const room = registry.ensureRoom('math-101', {
             displayName: 'Math 101',
@@ -39,7 +38,7 @@ describe('room-registry', () => {
         assert.equal(room.participants, 3);
     });
 
-    test('ensureRoom keeps the original createdAt when called again', () => {
+    test('ensureRoom keeps createdAt on re-call', () => {
         const registry = createRoomRegistry();
         const first = registry.ensureRoom('math-101');
         const second = registry.ensureRoom('math-101', {displayName: 'Renamed'});
@@ -49,12 +48,12 @@ describe('room-registry', () => {
         assert.equal(second.displayName, 'Renamed');
     });
 
-    test('get returns null for an unknown room', () => {
+    test('get returns null when unknown', () => {
         const registry = createRoomRegistry();
         assert.equal(registry.get('does-not-exist'), null);
     });
 
-    test('setParticipants marks emptySince when participants drop to 0', () => {
+    test('setParticipants stamps emptySince at 0', () => {
         const registry = createRoomRegistry();
         registry.ensureRoom('math-101', {participants: 2});
 
@@ -67,7 +66,7 @@ describe('room-registry', () => {
         assert.ok(room.emptySince, 'emptySince should be set when the room is empty');
     });
 
-    test('setParticipants keeps the first emptySince while the room stays empty', () => {
+    test('setParticipants keeps first emptySince', () => {
         const registry = createRoomRegistry();
         registry.ensureRoom('math-101');
 
@@ -78,7 +77,7 @@ describe('room-registry', () => {
         assert.equal(stillEmpty, firstEmpty);
     });
 
-    test('setParticipants clears emptySince when people rejoin', () => {
+    test('setParticipants clears emptySince on rejoin', () => {
         const registry = createRoomRegistry();
         registry.ensureRoom('math-101');
 
@@ -88,7 +87,7 @@ describe('room-registry', () => {
         assert.equal(room.emptySince, null);
     });
 
-    test('remove deletes a room and reports whether it existed', () => {
+    test('remove deletes and reports if it existed', () => {
         const registry = createRoomRegistry();
         registry.ensureRoom('math-101');
 
@@ -98,7 +97,7 @@ describe('room-registry', () => {
         assert.equal(registry.remove('math-101'), false);
     });
 
-    test('list returns rooms sorted alphabetically by name', () => {
+    test('list is sorted by name', () => {
         const registry = createRoomRegistry();
         registry.ensureRoom('physics');
         registry.ensureRoom('art');
