@@ -1,31 +1,63 @@
-export type CameraEffectMode = "off" | "funny-mask" | "mask-3d";
+export type WebcamVisibility = "visible" | "hidden";
 
-export interface EffectFeaturePlacement {
-    alpha: number;
-    offsetX: number;
-    offsetY: number;
-    scale: number;
+/**
+ * Background fill. Either:
+ *   - "none"  : transparent / no fill (default — webcam shows through)
+ *   - "image" : an uploaded picture
+ */
+export type BackgroundKind = "none" | "image";
+
+export interface BackgroundState {
+    kind: BackgroundKind;
+    /** Object URL for the uploaded image (only meaningful when kind === "image"). */
+    imageUrl: string | null;
+    /** Original filename for display in the UI. */
+    imageName: string;
 }
 
-export interface EffectAsset {
+/**
+ * 3D model overlay. The model is positioned and scaled relative to the
+ * face landmarks; ARKit-style blendshapes drive its facial morphs.
+ */
+export interface ModelState {
+    enabled: boolean;
     url: string | null;
     name: string;
-    opacity: number;
-    offsetX: number;
-    offsetY: number;
+    /** Size relative to the detected face width. */
     scale: number;
+    /** Horizontal offset, in fractions of face width. */
+    offsetX: number;
+    /** Vertical offset, in fractions of face height. */
+    offsetY: number;
+    /** Extra yaw offset in degrees for orientation tuning. */
+    rotationY: number;
+}
+
+/**
+ * Cutouts are now a single fixed effect with no per-region tuning. When
+ * enabled, the user's real eyes + mouth are revealed as windows through
+ * the model. The exact look (slightly larger, slightly cartoonish) is
+ * baked into the renderer.
+ */
+export interface CutoutsState {
+    enabled: boolean;
 }
 
 export interface CameraEffectsState {
+    /** Hide the raw webcam frame while keeping tracking + effects running. */
+    webcamVisibility: WebcamVisibility;
+
+    /** Debug overlay showing tracked landmarks. */
     showLandmarksDebug: boolean;
-    mode: CameraEffectMode;
-    overlayBackgroundAlpha: number;
-    eyes: EffectFeaturePlacement;
-    mouth: EffectFeaturePlacement;
-    funnyMask: EffectAsset;
-    mask3d: EffectAsset;
-    background: EffectAsset;
+
+    background: BackgroundState;
+    model: ModelState;
+    cutouts: CutoutsState;
 }
+
+// ----------------------------------------------------------------------
+// Defaults + clamps
+// ----------------------------------------------------------------------
 
 function clamp(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value));
@@ -33,44 +65,24 @@ function clamp(value: number, min: number, max: number) {
 
 export function createDefaultCameraEffectsState(): CameraEffectsState {
     return {
+        webcamVisibility: "visible",
         showLandmarksDebug: false,
-        mode: "off",
-        overlayBackgroundAlpha: 0.18,
-        eyes: {
-            alpha: 1,
-            offsetX: 0,
-            offsetY: 0,
-            scale: 1.5,
-        },
-        mouth: {
-            alpha: 1,
-            offsetX: 0,
-            offsetY: 0,
-            scale: 1.35,
-        },
-        funnyMask: {
-            url: null,
-            name: "",
-            opacity: 1,
-            offsetX: 0,
-            offsetY: 0,
-            scale: 1.38,
-        },
-        mask3d: {
-            url: null,
-            name: "",
-            opacity: 0.92,
-            offsetX: 0,
-            offsetY: 0,
-            scale: 1.06,
-        },
         background: {
+            kind: "none",
+            imageUrl: null,
+            imageName: "",
+        },
+        model: {
+            enabled: false,
             url: null,
             name: "",
-            opacity: 1,
+            scale: 1,
             offsetX: 0,
             offsetY: 0,
-            scale: 1,
+            rotationY: 0,
+        },
+        cutouts: {
+            enabled: false,
         },
     };
 }
@@ -78,66 +90,73 @@ export function createDefaultCameraEffectsState(): CameraEffectsState {
 export function normalizeEffectsState(state: CameraEffectsState): CameraEffectsState {
     return {
         ...state,
-        overlayBackgroundAlpha: clamp(state.overlayBackgroundAlpha, 0, 1),
-        eyes: {
-            ...state.eyes,
-            alpha: clamp(state.eyes.alpha, 0, 1),
-            scale: clamp(state.eyes.scale, 0.5, 3),
-            offsetX: clamp(state.eyes.offsetX, -0.75, 0.75),
-            offsetY: clamp(state.eyes.offsetY, -0.75, 0.75),
-        },
-        mouth: {
-            ...state.mouth,
-            alpha: clamp(state.mouth.alpha, 0, 1),
-            scale: clamp(state.mouth.scale, 0.5, 3),
-            offsetX: clamp(state.mouth.offsetX, -0.75, 0.75),
-            offsetY: clamp(state.mouth.offsetY, -0.75, 0.75),
-        },
-        funnyMask: {
-            ...state.funnyMask,
-            opacity: clamp(state.funnyMask.opacity, 0, 1),
-            scale: clamp(state.funnyMask.scale, 0.5, 3),
-            offsetX: clamp(state.funnyMask.offsetX, -0.75, 0.75),
-            offsetY: clamp(state.funnyMask.offsetY, -0.75, 0.75),
-        },
-        mask3d: {
-            ...state.mask3d,
-            opacity: clamp(state.mask3d.opacity, 0, 1),
-            scale: clamp(state.mask3d.scale, 0.5, 3),
-            offsetX: clamp(state.mask3d.offsetX, -0.75, 0.75),
-            offsetY: clamp(state.mask3d.offsetY, -0.75, 0.75),
-        },
-        background: {
-            ...state.background,
-            opacity: clamp(state.background.opacity, 0, 1),
-            scale: clamp(state.background.scale, 0.5, 3),
-            offsetX: clamp(state.background.offsetX, -0.75, 0.75),
-            offsetY: clamp(state.background.offsetY, -0.75, 0.75),
+        model: {
+            ...state.model,
+            scale:   clamp(state.model.scale,   0.1, 5),
+            offsetX: clamp(state.model.offsetX, -1, 1),
+            offsetY: clamp(state.model.offsetY, -1, 1),
+            rotationY: clamp(state.model.rotationY, -180, 180),
         },
     };
 }
 
-export function updateEffectAsset(
-    previousAsset: EffectAsset,
+// ----------------------------------------------------------------------
+// Background helpers
+// ----------------------------------------------------------------------
+
+/**
+ * Apply an uploaded image as the background. Revokes any previous object
+ * URL to avoid leaks. Pass `file = null` to clear the image (background
+ * resets to "none").
+ */
+export function setBackgroundImage(
+    previous: BackgroundState,
     file: File | null,
-): EffectAsset {
-    if (previousAsset.url) {
-        URL.revokeObjectURL(previousAsset.url);
+): BackgroundState {
+    if (previous.imageUrl) {
+        URL.revokeObjectURL(previous.imageUrl);
+    }
+
+    if (!file) {
+        return { kind: "none", imageUrl: null, imageName: "" };
+    }
+
+    return {
+        kind: "image",
+        imageUrl: URL.createObjectURL(file),
+        imageName: file.name,
+    };
+}
+
+// ----------------------------------------------------------------------
+// Model helpers
+// ----------------------------------------------------------------------
+
+/**
+ * Apply an uploaded GLB/GLTF file as the model. Revokes any previous
+ * object URL. Pass `file = null` to clear the model entirely.
+ */
+export function setModelFile(
+    previous: ModelState,
+    file: File | null,
+): ModelState {
+    if (previous.url) {
+        URL.revokeObjectURL(previous.url);
     }
 
     if (!file) {
         return {
-            ...previousAsset,
+            ...previous,
+            enabled: false,
             url: null,
             name: "",
         };
     }
 
     return {
-        ...previousAsset,
+        ...previous,
+        enabled: true,
         url: URL.createObjectURL(file),
         name: file.name,
     };
 }
-
-

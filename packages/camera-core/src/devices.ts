@@ -21,31 +21,6 @@ function mapDeviceOptions(devices: MediaDeviceInfo[], labelPrefix: string): Devi
 }
 
 /**
- * Best-effort browser detection for the debug overlay.
- *
- * This is informational only. It is not used for feature gating.
- */
-export function detectBrowserVersion(userAgent?: string) {
-    const agent = userAgent ?? (typeof navigator === "undefined" ? "" : navigator.userAgent);
-    const checks: Array<{ pattern: RegExp; name: string }> = [
-        { pattern: /Edg\/([\d.]+)/, name: "Edge" },
-        { pattern: /OPR\/([\d.]+)/, name: "Opera" },
-        { pattern: /Chrome\/([\d.]+)/, name: "Chrome" },
-        { pattern: /Version\/([\d.]+).*Safari/, name: "Safari" },
-        { pattern: /Firefox\/([\d.]+)/, name: "Firefox" },
-    ];
-
-    for (const check of checks) {
-        const match = agent.match(check.pattern);
-        if (match?.[1]) {
-            return `${check.name} ${match[1]}`;
-        }
-    }
-
-    return "Unknown browser";
-}
-
-/**
  * Enumerates available media devices and converts them into select options.
  *
  * Labels may still be generic until the user has granted media permissions.
