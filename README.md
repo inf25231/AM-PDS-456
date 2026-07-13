@@ -1,6 +1,6 @@
 # Amphi Calls
 
-Small pnpm workspace with two apps and a shared package:
+Small pnpm workspace with two apps:
 
 - `apps/web-app` — SvelteKit client: camera capture, face tracking, 3D-mask
   and background effects, LiveKit video calls.
@@ -8,8 +8,6 @@ Small pnpm workspace with two apps and a shared package:
   issues join tokens and manages room lifecycle; media never passes through
   it). See `apps/signaling-server/README.md` for the full API, project
   structure, and environment variables.
-- `packages/camera-core` — shared pure/Svelte-free camera helpers (device
-  enumeration, quality presets, settings persistence) used by `web-app`.
 
 ## Environment
 
@@ -48,12 +46,69 @@ Start the web application in development mode:
 pnpm web:dev
 ```
 
+Build and preview the production web build locally:
+
+```bash
+pnpm web:build
+pnpm web:preview
+```
+
+`web:preview` is only for local verification of a production build. Normal
+web builds use `adapter-auto`, so their deployed runtime is selected by the
+hosting platform. The Docker build explicitly uses the Node adapter.
+
+For CORS, reverse-proxy, and production preview details, see
+[the deployment guide](docs/deployment.md).
+
+## Docker
+
+Docker runs the web app and signaling server in separate containers. LiveKit
+remains an external service.
+
+```bash
+cp apps/signaling-server/.env.example apps/signaling-server/.env
+# Fill in only the three LIVEKIT_* values in apps/signaling-server/.env.
+pnpm docker:up
+```
+
+Open `http://localhost:3000`. The browser reaches the signaling server through
+`http://localhost:8080`. The Docker configuration already allows the matching
+local CORS origin, so no other values are needed.
+
+The `pnpm docker:*` commands are short aliases for Docker Compose. The direct
+Docker commands are:
+
+```bash
+docker compose up --build --detach                 # both services
+docker compose up --build --detach signaling       # signaling server only
+docker compose up --build --detach --no-deps web   # web app only
+docker compose down
+```
+
+The equivalent short commands are:
+
+```bash
+pnpm docker:up
+pnpm docker:server
+pnpm docker:web
+pnpm docker:down
+```
+
+Use `pnpm docker:dev` instead of `pnpm docker:up` to keep Docker logs in the
+terminal.
+
 ## Run The Signaling Server
 
 Start the signaling server in watch mode:
 
 ```bash
 pnpm signal:dev
+```
+
+Start it in production mode:
+
+```bash
+pnpm signal:start
 ```
 
 ## Build
@@ -64,24 +119,18 @@ Build all workspace packages:
 pnpm build
 ```
 
-## Other Commands
-
-Run only the web app build:
-
-```bash
-pnpm --filter web-app build
-```
-
-Preview the production web build locally:
-
-```bash
-pnpm --filter web-app preview
-```
+## Tests
 
 Run signaling-server tests:
 
 ```bash
 pnpm --filter signaling-server test
+```
+
+Run the web app's camera helper tests:
+
+```bash
+pnpm --filter web-app test
 ```
 
 ## Typical Local Flow
@@ -92,3 +141,8 @@ pnpm check
 pnpm lint
 pnpm web:dev
 ```
+
+## Deployment Details
+
+See [docs/deployment.md](docs/deployment.md) for CORS, PM2, health checks, and
+direct Docker Compose commands.

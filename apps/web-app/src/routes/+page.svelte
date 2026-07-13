@@ -1,5 +1,5 @@
 <!--
-    Camera route.
+    Main camera page.
 
     This file is the orchestration layer for the full camera page. It wires
     together four controllers and renders the visual stage. The controllers
@@ -37,20 +37,42 @@
   import eyeOpenIcon from '$lib/images/eye-open.svg';
   import eyeClosedIcon from '$lib/images/eye-close.svg';
 
-  import EffectsMenu from '$lib/components/camera/EffectsMenu.svelte';
-  import MediaControls from '$lib/components/camera/MediaControls.svelte';
-  import PillButton from '$lib/components/camera/PillButton.svelte';
-  import Banner from '$lib/components/camera/Banner.svelte';
-  import Actions from '$lib/components/camera/Actions.svelte';
-  import CameraStage from '$lib/components/camera/CameraStage.svelte';
-  import ToggleIcon from '$lib/components/camera/ToggleIcon.svelte';
+  import EffectsMenu from '$lib/components/EffectsMenu.svelte';
+  import MediaControls from '$lib/components/MediaControls.svelte';
+  import PillButton from '$lib/components/PillButton.svelte';
+  import Banner from '$lib/components/Banner.svelte';
+  import Actions from '$lib/components/Actions.svelte';
+  import CameraStage from '$lib/components/CameraStage.svelte';
+  import RoomPrompt from '$lib/components/RoomPrompt.svelte';
+  import ToggleIcon from '$lib/components/ToggleIcon.svelte';
 
   // --- DOM refs ---
   let videoEl = $state<HTMLVideoElement | null>(null);
   let previewContainerEl = $state<HTMLDivElement | null>(null);
+  let roomPrompt = $state<{ kind: 'room' | 'user'; initialValue: string } | null>(null);
+  let resolveRoomPrompt: ((value: string | null) => void) | null = null;
 
   // --- Stores / inline helpers ---
   const banner = new BannerStore();
+
+  // RoomController awaits these values, while the Svelte prompt remains
+  // non-blocking so the mobile camera render loop keeps running.
+  function requestRoomPrompt(kind: 'room' | 'user', previous: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      resolveRoomPrompt = resolve;
+      roomPrompt = {
+        kind,
+        initialValue: previous || (kind === 'room' ? 'amphi-room' : 'guest')
+      };
+    });
+  }
+
+  function completeRoomPrompt(value: string | null): void {
+    const resolve = resolveRoomPrompt;
+    resolveRoomPrompt = null;
+    roomPrompt = null;
+    resolve?.(value);
+  }
 
   // ------------------------------------------------------------------
   // Controllers
@@ -96,6 +118,8 @@
 
   const room = new RoomController({
     media,
+    promptRoomName: (previous) => requestRoomPrompt('room', previous),
+    promptUserName: (previous) => requestRoomPrompt('user', previous),
     onInfo: (message) => {
       banner.showInfo(message);
     },
@@ -164,7 +188,6 @@
     effects.state.model.offsetX;
     effects.state.model.offsetY;
     effects.state.model.rotationY;
-    effects.state.cutouts.enabled;
 
     room.connectionState;
 
@@ -218,6 +241,16 @@
 </svelte:head>
 
 <div class:camera-view={true} class:in-room={room.connectionState === 'connected'}>
+  {#if roomPrompt}
+    <RoomPrompt
+      title={roomPrompt.kind === 'room' ? 'Choose a room' : 'Choose your name'}
+      label={roomPrompt.kind === 'room' ? 'Room name' : 'Display name'}
+      initialValue={roomPrompt.initialValue}
+      onSubmit={(value) => completeRoomPrompt(value)}
+      onCancel={() => completeRoomPrompt(null)}
+    />
+  {/if}
+
   <CameraStage
     bind:videoEl
     bind:previewContainerEl
@@ -227,6 +260,13 @@
     cameraState={media.cameraState}
     cameraEnabled={media.cameraEnabled}
   />
+
+  {#if room.connectionState === 'connecting'}
+    <div class="connection-status" role="status" aria-live="polite">
+      <span class="connection-spinner" aria-hidden="true"></span>
+      {room.connectionStatus || 'Connecting…'}
+    </div>
+  {/if}
 
   <Actions
     connectionState={room.connectionState}
@@ -240,9 +280,20 @@
     isApplyingQuality={media.isApplyingQuality}
     cameraState={media.cameraState}
     microphoneState={media.microphoneState}
+    model={effects.state.model}
+    showLandmarksDebug={effects.state.showLandmarksDebug}
     onQualityChange={(q) => media.setQuality(q)}
     onVideoDeviceChange={(id) => media.setVideoDevice(id)}
     onAudioDeviceChange={(id) => media.setAudioDevice(id)}
+    onUploadModel={(file) => effects.handleUploadModel(file)}
+    onToggleModelEnabled={() => effects.toggleModelEnabled()}
+    onModelScaleChange={(value) => effects.setModelScale(value)}
+    onModelOffsetXChange={(value) => effects.setModelOffsetX(value)}
+    onModelOffsetYChange={(value) => effects.setModelOffsetY(value)}
+    onModelRotationYChange={(value) => effects.setModelRotationY(value)}
+    onResetModelTransform={() => effects.resetModelTransform()}
+    onClearModel={() => void effects.handleUploadModel(null)}
+    onToggleLandmarksDebug={() => effects.toggleLandmarksDebug()}
   />
 
   <div class="banners">
@@ -257,77 +308,129 @@
 
   <MediaControls>
     {#if room.connectionState === 'connected'}
-      <PillButton tone="danger" onclick={() => room.leave({ restartMedia: true })}>
-        Leave
-      </PillButton>
+      <div class="leave-control">
+        <PillButton tone="danger" onclick={() => room.leave({ restartMedia: true })}>
+          Leave
+        </PillButton>
+      </div>
     {/if}
 
-    <!-- Effects toggle + its popover, anchored to the toggle -->
-    <div class="effects-anchor">
-      <EffectsMenu
-        open={effects.showPanel}
-        {backgroundIcon}
-        {modelIcon}
-        webcamHidden={effects.state.webcamVisibility === 'hidden'}
-        {eyeOpenIcon}
-        {eyeClosedIcon}
-        onToggleWebcamVisibility={() => effects.toggleWebcamVisibility()}
-        backgroundKind={effects.state.background.kind}
-        onUploadBackground={(file) => effects.handleUploadBackground(file)}
-        onResetBackground={() => effects.clearBackground()}
-        modelEnabled={effects.state.model.enabled}
-        modelName={effects.state.model.name}
-        modelScale={effects.state.model.scale}
-        modelOffsetX={effects.state.model.offsetX}
-        modelOffsetY={effects.state.model.offsetY}
-        modelRotationY={effects.state.model.rotationY}
-        showLandmarksDebug={effects.state.showLandmarksDebug}
-        onUploadModel={(file) => effects.handleUploadModel(file)}
-        onToggleModelEnabled={() => effects.toggleModelEnabled()}
-        onModelScaleChange={(v) => effects.setModelScale(v)}
-        onModelOffsetXChange={(v) => effects.setModelOffsetX(v)}
-        onModelOffsetYChange={(v) => effects.setModelOffsetY(v)}
-        onModelRotationYChange={(v) => effects.setModelRotationY(v)}
-        onResetModelTransform={() => effects.resetModelTransform()}
-        onClearModel={() => {
-          effects.setModelEnabled(false);
-          void effects.handleUploadModel(null);
-        }}
-        cutoutsEnabled={effects.state.cutouts.enabled}
-        onToggleCutouts={() => effects.toggleCutoutsEnabled()}
-        onToggleLandmarksDebug={() => effects.toggleLandmarksDebug()}
-      />
+    <div class="media-toggle-group">
+      <!-- Effects toggle + its popover, anchored to the toggle -->
+      <div class="effects-anchor">
+        <EffectsMenu
+          open={effects.showPanel}
+          {backgroundIcon}
+          {modelIcon}
+          webcamHidden={effects.state.webcamVisibility === 'hidden'}
+          {eyeOpenIcon}
+          {eyeClosedIcon}
+          onToggleWebcamVisibility={() => effects.toggleWebcamVisibility()}
+          backgroundKind={effects.state.background.kind}
+          onUploadBackground={(file) => effects.handleUploadBackground(file)}
+          onResetBackground={() => effects.clearBackground()}
+          demoModelActive={effects.state.model.source === 'demo'}
+          onToggleDemoModel={() => effects.toggleDemoModel()}
+        />
 
+        <PillButton
+          iconOnly
+          ariaLabel={effects.showPanel ? 'Close effects panel' : 'Open effects'}
+          ariaPressed={effects.showPanel}
+          onclick={() => effects.togglePanel()}
+        >
+          <ToggleIcon active={effects.showPanel} activeSrc={closeIcon} inactiveSrc={starsIcon} />
+        </PillButton>
+      </div>
+
+      <!-- Camera toggle -->
       <PillButton
         iconOnly
-        ariaLabel={effects.showPanel ? 'Close effects panel' : 'Open effects'}
-        ariaPressed={effects.showPanel}
-        onclick={() => effects.togglePanel()}
+        disabled={media.cameraState === 'loading'}
+        ariaLabel={media.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
+        ariaPressed={media.cameraEnabled}
+        onclick={() => media.toggleCamera()}
       >
-        <ToggleIcon active={effects.showPanel} activeSrc={closeIcon} inactiveSrc={starsIcon} />
+        <ToggleIcon active={media.cameraEnabled} activeSrc={cameraOn} inactiveSrc={cameraOff} />
+      </PillButton>
+
+      <!-- Microphone toggle -->
+      <PillButton
+        iconOnly
+        disabled={media.microphoneState === 'loading'}
+        ariaLabel={media.microphoneEnabled ? 'Turn microphone off' : 'Turn microphone on'}
+        ariaPressed={media.microphoneEnabled}
+        onclick={() => media.toggleMicrophone()}
+      >
+        <ToggleIcon active={media.microphoneEnabled} activeSrc={micOn} inactiveSrc={micOff} />
       </PillButton>
     </div>
-
-    <!-- Camera toggle -->
-    <PillButton
-      iconOnly
-      disabled={media.cameraState === 'loading'}
-      ariaLabel={media.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
-      ariaPressed={media.cameraEnabled}
-      onclick={() => media.toggleCamera()}
-    >
-      <ToggleIcon active={media.cameraEnabled} activeSrc={cameraOn} inactiveSrc={cameraOff} />
-    </PillButton>
-
-    <!-- Microphone toggle -->
-    <PillButton
-      iconOnly
-      disabled={media.microphoneState === 'loading'}
-      ariaLabel={media.microphoneEnabled ? 'Turn microphone off' : 'Turn microphone on'}
-      ariaPressed={media.microphoneEnabled}
-      onclick={() => media.toggleMicrophone()}
-    >
-      <ToggleIcon active={media.microphoneEnabled} activeSrc={micOn} inactiveSrc={micOff} />
-    </PillButton>
   </MediaControls>
 </div>
+
+<style>
+  .effects-anchor {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .banners {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: max-content;
+    max-width: min(90vw, 480px);
+    align-items: center;
+    pointer-events: none;
+    transform: translateX(-50%);
+  }
+
+  .banners > :global(*) {
+    pointer-events: auto;
+  }
+
+  .connection-status {
+    position: absolute;
+    z-index: 30;
+    top: 50%;
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--control-radius);
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    transform: translate(-50%, -50%);
+    backdrop-filter: var(--surface-blur);
+    -webkit-backdrop-filter: var(--surface-blur);
+  }
+
+  .connection-spinner {
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid rgb(255 255 255 / 30%);
+    border-top-color: var(--text-primary);
+    border-radius: 50%;
+    animation: spin 800ms linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .banners {
+      top: calc(var(--control-corner-offset) + var(--control-size) + 0.75rem);
+    }
+  }
+</style>

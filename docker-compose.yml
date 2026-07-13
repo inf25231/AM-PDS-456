@@ -1,0 +1,30 @@
+services:
+  signaling:
+    build:
+      context: .
+      dockerfile: apps/signaling-server/Dockerfile
+    env_file:
+      - apps/signaling-server/.env
+    environment:
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - '8080:8080'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8080/health']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web-app/Dockerfile
+      args:
+        VITE_SIGNALING_PREFIX: http://localhost:8080
+    depends_on:
+      signaling:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    restart: unless-stopped

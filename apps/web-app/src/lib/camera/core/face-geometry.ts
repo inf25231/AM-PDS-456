@@ -5,26 +5,6 @@
 export type MappedPoint = readonly [x: number, y: number, z: number];
 
 /**
- * Scales `width`x`height` down (never up) so its longest edge is at most
- * `maxDimension`, preserving aspect ratio. Used to cap GPU/CPU processing
- * cost (WebGL fill-rate, MediaPipe inference) independent of the camera's
- * native capture resolution -- both the 3D-mask renderer and the
- * face-tracking downscale share this one calculation instead of each
- * re-deriving it.
- */
-export function computeDownscaledSize(width: number, height: number, maxDimension: number) {
-  if (!width || !height || !maxDimension) {
-    return { width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)) };
-  }
-
-  const scale = Math.min(1, maxDimension / Math.max(width, height));
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale))
-  };
-}
-
-/**
  * "Cover" fit transform (like CSS `object-fit: cover`): scale + center a
  * `videoWidth`x`videoHeight` source so it fully covers a
  * `displayWidth`x`displayHeight` area, cropping the overflow evenly on both

@@ -72,8 +72,18 @@ Optional:
 
 ## Run
 
+Run these commands from the repository root.
+
+Development mode reloads the server when source files change:
+
 ```bash
-pnpm --filter signaling-server dev
+pnpm signal:dev
+```
+
+Production mode runs the server without the file watcher:
+
+```bash
+pnpm signal:start
 ```
 
 ## Tests

@@ -9,10 +9,9 @@
  * Two parallel rendering paths:
  *   1. Preview canvases (background, 3D model, 2D effects) — overlaid
  *      on top of the local <video> for the user to see effects live.
- *   2. CompositionController — single offscreen canvas that produces a
- *      MediaStreamTrack for publishing to LiveKit. Currently composes
- *      ONLY the webcam (MVP); background / 3D / 2D layers will be added
- *      incrementally.
+ *   2. CompositionController — single offscreen canvas that combines the
+ *      webcam, background, 3D model, and optional landmarks debug overlay
+ *      into a MediaStreamTrack for publishing to LiveKit.
  *
  * Lifecycle:
  *   const effects = new EffectsController({ media, room, onError });
@@ -33,11 +32,12 @@ import {
   createDefaultCameraEffectsState,
   normalizeEffectsState,
   setBackgroundImage,
+  setDemoModel,
   setModelFile,
   type CameraEffectsState,
   type WebcamVisibility
 } from '$lib/camera/effects';
-import { drawCameraEffectsOverlay } from '$lib/camera/effects-renderer';
+import { drawLandmarksDebug } from '$lib/camera/landmarks-renderer';
 import { ThreeMaskRenderer } from '$lib/camera/three-mask-renderer';
 import { startFaceTracking, type FaceLandmarkerResult } from '$lib/camera/tracking';
 import { getMediaErrorMessage } from '$lib/camera/errors';
@@ -51,7 +51,7 @@ import { CompositionController } from './composition.svelte.js';
 // ----------------------------------------------------------------------
 
 export function shouldTrackFace(state: CameraEffectsState): boolean {
-  return state.model.enabled || state.cutouts.enabled || state.showLandmarksDebug;
+  return state.model.enabled || state.showLandmarksDebug;
 }
 
 // ----------------------------------------------------------------------
@@ -136,7 +136,8 @@ export class EffectsController {
       renderBackground: (ctx, state) =>
         this.drawBackgroundFrame(ctx, ctx.canvas.width, ctx.canvas.height, state),
       renderModel: (ctx, state, faceResult) => this.renderModelLayer(ctx, state, faceResult),
-      renderEffects2D: (ctx, state, faceResult) => this.renderEffectsLayer(ctx, state, faceResult),
+      renderLandmarks: (ctx, state, faceResult) =>
+        this.renderLandmarksLayer(ctx, state, faceResult),
       onReady: () => {
         this.opts.onCompositionReady?.();
       },
@@ -193,7 +194,7 @@ export class EffectsController {
     if (this.state.background.imageUrl) {
       URL.revokeObjectURL(this.state.background.imageUrl);
     }
-    if (this.state.model.url) {
+    if (this.state.model.source === 'custom' && this.state.model.url) {
       URL.revokeObjectURL(this.state.model.url);
     }
 
@@ -345,6 +346,17 @@ export class EffectsController {
     this.setModelEnabled(!this.state.model.enabled);
   }
 
+  toggleDemoModel(): void {
+    if (this.state.model.source !== 'none') {
+      void this.handleUploadModel(null);
+      return;
+    }
+
+    this.state.model = setDemoModel(this.state.model);
+    void this.sync3dMaskModel();
+    this.syncTracking();
+  }
+
   setModelScale(scale: number): void {
     this.state.model = { ...this.state.model, scale };
   }
@@ -391,19 +403,6 @@ export class EffectsController {
 
   resetModelTransform(): void {
     this.state.model = { ...this.state.model, scale: 1, offsetX: 0, offsetY: 0, rotationY: 0 };
-  }
-
-  // ==================================================================
-  // Cutouts
-  // ==================================================================
-
-  setCutoutsEnabled(enabled: boolean): void {
-    this.state.cutouts = { ...this.state.cutouts, enabled };
-    this.syncTracking();
-  }
-
-  toggleCutoutsEnabled(): void {
-    this.setCutoutsEnabled(!this.state.cutouts.enabled);
   }
 
   setLandmarksDebug(enabled: boolean): void {
@@ -454,19 +453,14 @@ export class EffectsController {
     }
   }
 
-  private renderEffectsLayer(
+  private renderLandmarksLayer(
     ctx: CanvasRenderingContext2D,
     state: CameraEffectsState,
     faceResult: FaceLandmarkerResult | null
   ): void {
     const video = this.elements?.video;
-    if (!video) return;
-
-    if (!state.cutouts.enabled && !state.showLandmarksDebug) {
-      return;
-    }
-
-    drawCameraEffectsOverlay(ctx, video, faceResult, state, { clear: false });
+    if (!video || !state.showLandmarksDebug) return;
+    drawLandmarksDebug(ctx, video, faceResult);
   }
 
   private disposeComposition(): void {
@@ -551,7 +545,7 @@ export class EffectsController {
     this.modelRenderer?.dispose();
     this.modelRenderer = null;
     try {
-      this.modelRenderer = new ThreeMaskRenderer(canvas, { lowPower: this.isMobileViewport });
+      this.modelRenderer = new ThreeMaskRenderer(canvas);
     } catch (error) {
       this.opts.onError?.(getMediaErrorMessage('camera', error));
     }

@@ -23,6 +23,7 @@ export interface ModelState {
   enabled: boolean;
   url: string | null;
   name: string;
+  source: 'none' | 'demo' | 'custom';
   /** Size relative to the detected face width. */
   scale: number;
   /** Horizontal offset, in fractions of face width. */
@@ -31,16 +32,6 @@ export interface ModelState {
   offsetY: number;
   /** Extra yaw offset in degrees for orientation tuning. */
   rotationY: number;
-}
-
-/**
- * Cutouts are now a single fixed effect with no per-region tuning. When
- * enabled, the user's real eyes + mouth are revealed as windows through
- * the model. The exact look (slightly larger, slightly cartoonish) is
- * baked into the renderer.
- */
-export interface CutoutsState {
-  enabled: boolean;
 }
 
 export interface CameraEffectsState {
@@ -52,7 +43,6 @@ export interface CameraEffectsState {
 
   background: BackgroundState;
   model: ModelState;
-  cutouts: CutoutsState;
 }
 
 // ----------------------------------------------------------------------
@@ -76,13 +66,11 @@ export function createDefaultCameraEffectsState(): CameraEffectsState {
       enabled: false,
       url: null,
       name: '',
+      source: 'none',
       scale: 1,
       offsetX: 0,
       offsetY: 0,
       rotationY: 0
-    },
-    cutouts: {
-      enabled: false
     }
   };
 }
@@ -134,7 +122,7 @@ export function setBackgroundImage(previous: BackgroundState, file: File | null)
  * object URL. Pass `file = null` to clear the model entirely.
  */
 export function setModelFile(previous: ModelState, file: File | null): ModelState {
-  if (previous.url) {
+  if (previous.source === 'custom' && previous.url) {
     URL.revokeObjectURL(previous.url);
   }
 
@@ -143,7 +131,8 @@ export function setModelFile(previous: ModelState, file: File | null): ModelStat
       ...previous,
       enabled: false,
       url: null,
-      name: ''
+      name: '',
+      source: 'none'
     };
   }
 
@@ -151,6 +140,24 @@ export function setModelFile(previous: ModelState, file: File | null): ModelStat
     ...previous,
     enabled: true,
     url: URL.createObjectURL(file),
-    name: file.name
+    name: file.name,
+    source: 'custom'
+  };
+}
+
+export const DEMO_RACCOON_MODEL_URL =
+  'https://storage.googleapis.com/mediapipe-tasks/face_landmarker/raccoon_head.glb';
+
+export function setDemoModel(previous: ModelState): ModelState {
+  if (previous.source === 'custom' && previous.url) {
+    URL.revokeObjectURL(previous.url);
+  }
+
+  return {
+    ...previous,
+    enabled: true,
+    url: DEMO_RACCOON_MODEL_URL,
+    name: 'Raccoon head (demo)',
+    source: 'demo'
   };
 }

@@ -116,6 +116,7 @@ export class RoomController {
   // --- Connection state ---
   connectionState = $state<RoomConnectionState>('disconnected');
   connectionError = $state('');
+  connectionStatus = $state('');
   activeRoomName = $state<string | null>(null);
 
   // --- Participants ---
@@ -182,11 +183,15 @@ export class RoomController {
     if (!username) return;
 
     try {
+      this.connectionState = 'connecting';
+      this.connectionStatus = 'Preparing camera…';
       await this.media.ensureReadyForCall();
+      this.connectionStatus = 'Creating room…';
       const createdRoom = await createRoom(requestedRoomName, requestedRoomName);
       await this.connect(createdRoom.room.name, username);
     } catch (error) {
       this.connectionState = 'error';
+      this.connectionStatus = '';
       this.connectionError = getMediaErrorMessage('media', error);
       this.opts.onError?.(this.connectionError);
     }
@@ -208,10 +213,14 @@ export class RoomController {
     if (!username) return;
 
     try {
+      this.connectionState = 'connecting';
+      this.connectionStatus = 'Preparing camera…';
       await this.media.ensureReadyForCall();
+      this.connectionStatus = 'Joining room…';
       await this.connect(roomName, username);
     } catch (error) {
       this.connectionState = 'error';
+      this.connectionStatus = '';
       this.connectionError = getMediaErrorMessage('media', error);
       this.opts.onError?.(this.connectionError);
     }
@@ -343,6 +352,7 @@ export class RoomController {
     let room: Room | null = null;
     this.connectionError = '';
     this.connectionState = 'connecting';
+    this.connectionStatus = 'Connecting…';
 
     try {
       if (this.room) {
@@ -364,6 +374,7 @@ export class RoomController {
       await room.connect(joinResponse.livekitUrl, joinResponse.token);
       this.activeRoomName = joinResponse.room;
       this.connectionState = 'connected';
+      this.connectionStatus = '';
       this.lastParticipantCount = 0;
 
       this.rememberSession(joinResponse.room, joinResponse.username);
@@ -569,6 +580,7 @@ export class RoomController {
     this.activeRoomName = null;
     this.connectionState = 'disconnected';
     this.connectionError = '';
+    this.connectionStatus = '';
     this.participantStreams.clear();
     this.participantTiles = [];
     this.lastParticipantCount = 0;

@@ -7,7 +7,7 @@ app.d.ts
 .netlify
 .wrangler
 /.svelte-kit
-/build
+**/build/
 
 # OS
 .DS_Store

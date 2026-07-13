@@ -1,13 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { CameraEffectsState } from '$lib/camera/effects';
-import {
-  FACE_OVAL_INDICES,
-  computeCoverTransform,
-  averagePoint,
-  getBBox,
-  computeDownscaledSize
-} from 'camera-core';
+import { FACE_OVAL_INDICES, computeCoverTransform, averagePoint, getBBox } from '$lib/camera/core';
 import type { FaceLandmarkerResult } from '$lib/camera/tracking';
 
 type Landmark = { x: number; y: number; z: number };
@@ -54,34 +48,15 @@ function normalizeBlendshapeName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// Rendering the mask at the camera's full native resolution (up to 1920x1080
-// for the "1080p" quality preset) with antialiasing is unnecessarily
-// expensive on mobile GPUs that are already busy running MediaPipe's
-// face-landmark inference concurrently -- but on desktop, where GPU headroom
-// isn't the bottleneck, the same downscale + no-antialias trade-off is a
-// pure (and visible) quality regression with no perf benefit. So both are
-// gated behind `lowPower` (mobile viewport), decided by the caller.
-//
-// When capping resolution, the orthographic camera's projection stays
-// mapped to the full logical video-pixel space (see `resize()`), so this
-// only affects the actual pixel density of the render target, not the
-// mask's position/scale math.
-const MAX_RENDER_DIMENSION_LOW_POWER = 640;
-
-export interface ThreeMaskRendererOptions {
-  /** Trade visual quality for GPU headroom (mobile viewports). */
-  lowPower?: boolean;
-}
-
 export class ThreeMaskRenderer {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
   private readonly camera: THREE.OrthographicCamera;
   private readonly root: THREE.Group;
   private readonly loader: GLTFLoader;
-  private readonly lowPower: boolean;
   private modelObject: THREE.Object3D | null = null;
   private modelUrl: string | null = null;
+  private modelLoadVersion = 0;
   private width = 1;
   private height = 1;
   /** Model's real width after being normalized to a unit max-dimension at load time. */
@@ -92,16 +67,11 @@ export class ThreeMaskRenderer {
   private morphNormalizedDicts = new Map<THREE.Mesh, Map<string, number>>();
   private blendshapeSmooth = new Map<string, number>();
 
-  constructor(canvas: HTMLCanvasElement, options: ThreeMaskRendererOptions = {}) {
-    this.lowPower = options.lowPower ?? false;
-
+  constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
-      // Antialiasing roughly doubles fragment-shader cost for a marginal
-      // visual gain on what's ultimately a small, video-composited overlay --
-      // only worth skipping on GPU-constrained mobile devices.
-      antialias: !this.lowPower
+      antialias: true
     });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.setPixelRatio(1);
@@ -140,18 +110,7 @@ export class ThreeMaskRenderer {
     this.width = nextWidth;
     this.height = nextHeight;
 
-    // Keep the camera's projection mapped to the full logical (video-pixel)
-    // space so all the mask position/scale math elsewhere stays in those
-    // coordinates. On low-power (mobile) devices, cap the actual WebGL
-    // render-buffer resolution -- aspect ratio preserved so nothing looks
-    // stretched, it's just fewer pixels for the fragment shader to fill.
-    // On desktop, render at full resolution (no perf need, and downscaling
-    // here would just be a visible quality regression for no benefit).
-    const { width: renderWidth, height: renderHeight } = this.lowPower
-      ? computeDownscaledSize(this.width, this.height, MAX_RENDER_DIMENSION_LOW_POWER)
-      : { width: this.width, height: this.height };
-
-    this.renderer.setSize(renderWidth, renderHeight, false);
+    this.renderer.setSize(this.width, this.height, false);
     this.camera.left = 0;
     this.camera.right = this.width;
     this.camera.top = this.height;
@@ -171,6 +130,7 @@ export class ThreeMaskRenderer {
       return 0;
     }
 
+    const loadVersion = ++this.modelLoadVersion;
     this.modelUrl = url;
 
     if (this.modelObject) {
@@ -185,6 +145,10 @@ export class ThreeMaskRenderer {
 
     const gltf = await this.loader.loadAsync(url);
     const model = gltf.scene;
+    if (loadVersion !== this.modelLoadVersion) {
+      this.disposeObject(model);
+      return 0;
+    }
 
     const box = new THREE.Box3().setFromObject(model);
     const center = new THREE.Vector3();

@@ -12,7 +12,7 @@ export interface CompositionControllerOptions {
     state: CameraEffectsState,
     faceResult: FaceLandmarkerResult | null
   ) => void;
-  renderEffects2D?: (
+  renderLandmarks?: (
     ctx: CanvasRenderingContext2D,
     state: CameraEffectsState,
     faceResult: FaceLandmarkerResult | null
@@ -179,7 +179,7 @@ export class CompositionController {
     try {
       this.opts.renderBackground?.(ctx, state);
       this.opts.renderModel?.(ctx, state, faceResult);
-      this.opts.renderEffects2D?.(ctx, state, faceResult);
+      this.opts.renderLandmarks?.(ctx, state, faceResult);
     } catch (error) {
       this.opts.onError?.(`Composition render error: ${String(error)}`);
     }
