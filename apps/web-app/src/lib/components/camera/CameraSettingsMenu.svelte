@@ -13,7 +13,6 @@
 <script lang="ts">
   import type { DeviceOption } from 'camera-core';
   import MediaPopover from '$lib/components/camera/MediaPopover.svelte';
-  import ModelSettings from './ModelSettings.svelte';
   import settingsIcon from '$lib/images/settings.svg';
   import closeIcon from '$lib/images/x-close.svg';
   import type { CameraState, VideoQuality } from 'camera-core';
@@ -81,6 +80,15 @@
 
   const isCameraBusy = $derived(isApplyingQuality || cameraState === 'loading');
   const isMicBusy = $derived(microphoneState === 'loading');
+  const hasModel = $derived(model.source !== 'none');
+  let modelFileInput = $state<HTMLInputElement | null>(null);
+
+  function uploadCustomModel(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) void onUploadModel(file);
+    input.value = '';
+  }
 </script>
 
 <MediaPopover openIcon={settingsIcon} {closeIcon}>
@@ -145,19 +153,92 @@
       </span>
     </label>
 
-    <ModelSettings
-      {model}
-      {showLandmarksDebug}
-      {onUploadModel}
-      {onToggleModelEnabled}
-      {onModelScaleChange}
-      {onModelOffsetXChange}
-      {onModelOffsetYChange}
-      {onModelRotationYChange}
-      {onResetModelTransform}
-      {onClearModel}
-      {onToggleLandmarksDebug}
-    />
+    <label class="settings-row">
+      <span class="settings-copy">
+        <span class="settings-title">Show landmarks</span>
+        <span class="settings-hint">Face tracking debug overlay</span>
+      </span>
+      <input type="checkbox" checked={showLandmarksDebug} onchange={onToggleLandmarksDebug} />
+    </label>
+
+    <section class="model-settings" aria-label="3D model settings">
+      <div class="model-heading">
+        <span class="settings-title">3D Model</span>
+        <button type="button" onclick={() => modelFileInput?.click()}>
+          {hasModel ? 'Replace with custom' : 'Upload model (.glb)'}
+        </button>
+        <input
+          bind:this={modelFileInput}
+          type="file"
+          accept=".glb,model/gltf-binary"
+          hidden
+          onchange={uploadCustomModel}
+        />
+      </div>
+
+      {#if hasModel}
+        <div class="model-name" title={model.name}>{model.name}</div>
+
+        <label class="model-row">
+          <span>Show model</span>
+          <input type="checkbox" checked={model.enabled} onchange={onToggleModelEnabled} />
+        </label>
+
+        <label class="slider-row">
+          <span>Scale</span>
+          <input
+            type="range"
+            min="0.1"
+            max="5"
+            step="0.05"
+            value={model.scale}
+            oninput={(event) => onModelScaleChange(+event.currentTarget.value)}
+          />
+          <output>{model.scale.toFixed(2)}</output>
+        </label>
+        <label class="slider-row">
+          <span>Offset X</span>
+          <input
+            type="range"
+            min="-1"
+            max="1"
+            step="0.01"
+            value={model.offsetX}
+            oninput={(event) => onModelOffsetXChange(+event.currentTarget.value)}
+          />
+          <output>{model.offsetX.toFixed(2)}</output>
+        </label>
+        <label class="slider-row">
+          <span>Offset Y</span>
+          <input
+            type="range"
+            min="-1"
+            max="1"
+            step="0.01"
+            value={model.offsetY}
+            oninput={(event) => onModelOffsetYChange(+event.currentTarget.value)}
+          />
+          <output>{model.offsetY.toFixed(2)}</output>
+        </label>
+        <label class="slider-row">
+          <span>Yaw</span>
+          <input
+            type="range"
+            min="-180"
+            max="180"
+            step="1"
+            value={model.rotationY}
+            oninput={(event) => onModelRotationYChange(+event.currentTarget.value)}
+          />
+          <output>{model.rotationY.toFixed(0)}deg</output>
+        </label>
+
+        <div class="model-actions">
+          <button type="button" onclick={onResetModelTransform}>Reset</button>
+          <button type="button" class="danger" onclick={onClearModel}>Remove</button>
+        </div>
+      {/if}
+    </section>
   </div>
 </MediaPopover>
 
@@ -236,6 +317,67 @@
   .select-wrap select:disabled {
     opacity: 0.5;
     cursor: wait;
+  }
+
+  .model-settings {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--surface-border);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+  }
+
+  .model-heading,
+  .model-row,
+  .model-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .model-settings button {
+    padding: 0.4rem 0.65rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--surface-radius-inner);
+    background: var(--surface-bg-soft);
+    color: var(--text-primary);
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .model-name,
+  .model-settings output {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+  }
+
+  .model-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .slider-row {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr) 2.5rem;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .slider-row input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .model-settings output {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .model-settings .danger {
+    color: rgb(255 120 120);
   }
 
   @media (max-width: 560px) {
