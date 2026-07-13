@@ -162,5 +162,4 @@ describe('routes (integration)', () => {
     assert.equal(body.ok, false);
     assert.match(body.error, /at most 64 characters/);
   });
-
 });

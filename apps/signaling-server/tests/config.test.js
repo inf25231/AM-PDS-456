@@ -5,7 +5,14 @@ import { getServerConfig, assertConfig } from '../src/config.js';
 
 // getServerConfig reads from process.env, so we save and restore the relevant
 // variables around each test to keep them isolated.
-const ENV_KEYS = ['PORT', 'NODE_ENV', 'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'CORS_ORIGIN'];
+const ENV_KEYS = [
+  'PORT',
+  'NODE_ENV',
+  'LIVEKIT_URL',
+  'LIVEKIT_API_KEY',
+  'LIVEKIT_API_SECRET',
+  'CORS_ORIGIN'
+];
 
 let savedEnv;
 
