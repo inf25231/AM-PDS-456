@@ -29,4 +29,15 @@
     align-items: center;
     gap: var(--control-gap);
   }
+
+  :global(.media-toggle-group) {
+    display: flex;
+    align-items: center;
+    gap: var(--control-gap);
+  }
+
+  :global(.leave-control) {
+    position: absolute;
+    right: calc(100% + var(--control-gap));
+  }
 </style>

@@ -43,14 +43,39 @@
   import Banner from '$lib/components/camera/Banner.svelte';
   import Actions from '$lib/components/camera/Actions.svelte';
   import CameraStage from '$lib/components/camera/CameraStage.svelte';
+  import RoomPrompt from '$lib/components/camera/RoomPrompt.svelte';
   import ToggleIcon from '$lib/components/camera/ToggleIcon.svelte';
 
   // --- DOM refs ---
   let videoEl = $state<HTMLVideoElement | null>(null);
   let previewContainerEl = $state<HTMLDivElement | null>(null);
+  let roomPrompt = $state<{ kind: 'room' | 'user'; initialValue: string } | null>(null);
+  let resolveRoomPrompt: ((value: string | null) => void) | null = null;
 
   // --- Stores / inline helpers ---
   const banner = new BannerStore();
+
+  // RoomController awaits these values, while the Svelte prompt remains
+  // non-blocking so the mobile camera render loop keeps running.
+  function requestRoomPrompt(
+    kind: 'room' | 'user',
+    previous: string
+  ): Promise<string | null> {
+    return new Promise((resolve) => {
+      resolveRoomPrompt = resolve;
+      roomPrompt = {
+        kind,
+        initialValue: previous || (kind === 'room' ? 'amphi-room' : 'guest')
+      };
+    });
+  }
+
+  function completeRoomPrompt(value: string | null): void {
+    const resolve = resolveRoomPrompt;
+    resolveRoomPrompt = null;
+    roomPrompt = null;
+    resolve?.(value);
+  }
 
   // ------------------------------------------------------------------
   // Controllers
@@ -96,6 +121,8 @@
 
   const room = new RoomController({
     media,
+    promptRoomName: (previous) => requestRoomPrompt('room', previous),
+    promptUserName: (previous) => requestRoomPrompt('user', previous),
     onInfo: (message) => {
       banner.showInfo(message);
     },
@@ -190,11 +217,11 @@
       return;
     }
 
+    effects.init();
     effects.attachElements({
       video: videoEl,
       previewContainer: previewContainerEl
     });
-    effects.init();
     effects.syncAll();
 
     // Dev-only debug handle. Never expose controllers on window in production.
@@ -218,7 +245,17 @@
 </svelte:head>
 
 <div class:camera-view={true} class:in-room={room.connectionState === 'connected'}>
-  <CameraStage
+{#if roomPrompt}
+  <RoomPrompt
+    title={roomPrompt.kind === 'room' ? 'Choose a room' : 'Choose your name'}
+    label={roomPrompt.kind === 'room' ? 'Room name' : 'Display name'}
+    initialValue={roomPrompt.initialValue}
+    onSubmit={(value) => completeRoomPrompt(value)}
+    onCancel={() => completeRoomPrompt(null)}
+  />
+{/if}
+
+<CameraStage
     bind:videoEl
     bind:previewContainerEl
     roomName={room.activeRoomName}
@@ -227,6 +264,13 @@
     cameraState={media.cameraState}
     cameraEnabled={media.cameraEnabled}
   />
+
+  {#if room.connectionState === 'connecting'}
+    <div class="connection-status" role="status" aria-live="polite">
+      <span class="connection-spinner" aria-hidden="true"></span>
+      {room.connectionStatus || 'Connecting…'}
+    </div>
+  {/if}
 
   <Actions
     connectionState={room.connectionState}
@@ -257,77 +301,117 @@
 
   <MediaControls>
     {#if room.connectionState === 'connected'}
-      <PillButton tone="danger" onclick={() => room.leave({ restartMedia: true })}>
-        Leave
-      </PillButton>
+      <div class="leave-control">
+        <PillButton tone="danger" onclick={() => room.leave({ restartMedia: true })}>
+          Leave
+        </PillButton>
+      </div>
     {/if}
 
-    <!-- Effects toggle + its popover, anchored to the toggle -->
-    <div class="effects-anchor">
-      <EffectsMenu
-        open={effects.showPanel}
-        {backgroundIcon}
-        {modelIcon}
-        webcamHidden={effects.state.webcamVisibility === 'hidden'}
-        {eyeOpenIcon}
-        {eyeClosedIcon}
-        onToggleWebcamVisibility={() => effects.toggleWebcamVisibility()}
-        backgroundKind={effects.state.background.kind}
-        onUploadBackground={(file) => effects.handleUploadBackground(file)}
-        onResetBackground={() => effects.clearBackground()}
-        modelEnabled={effects.state.model.enabled}
-        modelName={effects.state.model.name}
-        modelScale={effects.state.model.scale}
-        modelOffsetX={effects.state.model.offsetX}
-        modelOffsetY={effects.state.model.offsetY}
-        modelRotationY={effects.state.model.rotationY}
-        showLandmarksDebug={effects.state.showLandmarksDebug}
-        onUploadModel={(file) => effects.handleUploadModel(file)}
-        onToggleModelEnabled={() => effects.toggleModelEnabled()}
-        onModelScaleChange={(v) => effects.setModelScale(v)}
-        onModelOffsetXChange={(v) => effects.setModelOffsetX(v)}
-        onModelOffsetYChange={(v) => effects.setModelOffsetY(v)}
-        onModelRotationYChange={(v) => effects.setModelRotationY(v)}
-        onResetModelTransform={() => effects.resetModelTransform()}
-        onClearModel={() => {
-          effects.setModelEnabled(false);
-          void effects.handleUploadModel(null);
-        }}
-        cutoutsEnabled={effects.state.cutouts.enabled}
-        onToggleCutouts={() => effects.toggleCutoutsEnabled()}
-        onToggleLandmarksDebug={() => effects.toggleLandmarksDebug()}
-      />
+    <div class="media-toggle-group">
+      <!-- Effects toggle + its popover, anchored to the toggle -->
+      <div class="effects-anchor">
+        <EffectsMenu
+          open={effects.showPanel}
+          {backgroundIcon}
+          {modelIcon}
+          webcamHidden={effects.state.webcamVisibility === 'hidden'}
+          {eyeOpenIcon}
+          {eyeClosedIcon}
+          onToggleWebcamVisibility={() => effects.toggleWebcamVisibility()}
+          backgroundKind={effects.state.background.kind}
+          onUploadBackground={(file) => effects.handleUploadBackground(file)}
+          onResetBackground={() => effects.clearBackground()}
+          modelEnabled={effects.state.model.enabled}
+          modelName={effects.state.model.name}
+          modelScale={effects.state.model.scale}
+          modelOffsetX={effects.state.model.offsetX}
+          modelOffsetY={effects.state.model.offsetY}
+          modelRotationY={effects.state.model.rotationY}
+          showLandmarksDebug={effects.state.showLandmarksDebug}
+          onUploadModel={(file) => effects.handleUploadModel(file)}
+          onToggleModelEnabled={() => effects.toggleModelEnabled()}
+          onModelScaleChange={(v) => effects.setModelScale(v)}
+          onModelOffsetXChange={(v) => effects.setModelOffsetX(v)}
+          onModelOffsetYChange={(v) => effects.setModelOffsetY(v)}
+          onModelRotationYChange={(v) => effects.setModelRotationY(v)}
+          onResetModelTransform={() => effects.resetModelTransform()}
+          onClearModel={() => {
+            effects.setModelEnabled(false);
+            void effects.handleUploadModel(null);
+          }}
+          cutoutsEnabled={effects.state.cutouts.enabled}
+          onToggleCutouts={() => effects.toggleCutoutsEnabled()}
+          onToggleLandmarksDebug={() => effects.toggleLandmarksDebug()}
+        />
 
+        <PillButton
+          iconOnly
+          ariaLabel={effects.showPanel ? 'Close effects panel' : 'Open effects'}
+          ariaPressed={effects.showPanel}
+          onclick={() => effects.togglePanel()}
+        >
+          <ToggleIcon active={effects.showPanel} activeSrc={closeIcon} inactiveSrc={starsIcon} />
+        </PillButton>
+      </div>
+
+      <!-- Camera toggle -->
       <PillButton
         iconOnly
-        ariaLabel={effects.showPanel ? 'Close effects panel' : 'Open effects'}
-        ariaPressed={effects.showPanel}
-        onclick={() => effects.togglePanel()}
+        disabled={media.cameraState === 'loading'}
+        ariaLabel={media.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
+        ariaPressed={media.cameraEnabled}
+        onclick={() => media.toggleCamera()}
       >
-        <ToggleIcon active={effects.showPanel} activeSrc={closeIcon} inactiveSrc={starsIcon} />
+        <ToggleIcon active={media.cameraEnabled} activeSrc={cameraOn} inactiveSrc={cameraOff} />
+      </PillButton>
+
+      <!-- Microphone toggle -->
+      <PillButton
+        iconOnly
+        disabled={media.microphoneState === 'loading'}
+        ariaLabel={media.microphoneEnabled ? 'Turn microphone off' : 'Turn microphone on'}
+        ariaPressed={media.microphoneEnabled}
+        onclick={() => media.toggleMicrophone()}
+      >
+        <ToggleIcon active={media.microphoneEnabled} activeSrc={micOn} inactiveSrc={micOff} />
       </PillButton>
     </div>
-
-    <!-- Camera toggle -->
-    <PillButton
-      iconOnly
-      disabled={media.cameraState === 'loading'}
-      ariaLabel={media.cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
-      ariaPressed={media.cameraEnabled}
-      onclick={() => media.toggleCamera()}
-    >
-      <ToggleIcon active={media.cameraEnabled} activeSrc={cameraOn} inactiveSrc={cameraOff} />
-    </PillButton>
-
-    <!-- Microphone toggle -->
-    <PillButton
-      iconOnly
-      disabled={media.microphoneState === 'loading'}
-      ariaLabel={media.microphoneEnabled ? 'Turn microphone off' : 'Turn microphone on'}
-      ariaPressed={media.microphoneEnabled}
-      onclick={() => media.toggleMicrophone()}
-    >
-      <ToggleIcon active={media.microphoneEnabled} activeSrc={micOn} inactiveSrc={micOff} />
-    </PillButton>
   </MediaControls>
 </div>
+
+<style>
+  .connection-status {
+    position: absolute;
+    z-index: 30;
+    top: 50%;
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--control-radius);
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    transform: translate(-50%, -50%);
+    backdrop-filter: var(--surface-blur);
+    -webkit-backdrop-filter: var(--surface-blur);
+  }
+
+  .connection-spinner {
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid rgb(255 255 255 / 30%);
+    border-top-color: var(--text-primary);
+    border-radius: 50%;
+    animation: spin 800ms linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+</style>

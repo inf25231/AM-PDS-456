@@ -216,3 +216,9 @@ body,
 .banners > * {
   pointer-events: auto;
 }
+
+@media (max-width: 640px) {
+  .banners {
+    top: calc(var(--control-corner-offset) + var(--control-size) + 0.75rem);
+  }
+}
