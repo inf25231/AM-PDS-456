@@ -57,10 +57,7 @@
 
   // RoomController awaits these values, while the Svelte prompt remains
   // non-blocking so the mobile camera render loop keeps running.
-  function requestRoomPrompt(
-    kind: 'room' | 'user',
-    previous: string
-  ): Promise<string | null> {
+  function requestRoomPrompt(kind: 'room' | 'user', previous: string): Promise<string | null> {
     return new Promise((resolve) => {
       resolveRoomPrompt = resolve;
       roomPrompt = {
@@ -191,7 +188,6 @@
     effects.state.model.offsetX;
     effects.state.model.offsetY;
     effects.state.model.rotationY;
-    effects.state.cutouts.enabled;
 
     room.connectionState;
 
@@ -245,17 +241,17 @@
 </svelte:head>
 
 <div class:camera-view={true} class:in-room={room.connectionState === 'connected'}>
-{#if roomPrompt}
-  <RoomPrompt
-    title={roomPrompt.kind === 'room' ? 'Choose a room' : 'Choose your name'}
-    label={roomPrompt.kind === 'room' ? 'Room name' : 'Display name'}
-    initialValue={roomPrompt.initialValue}
-    onSubmit={(value) => completeRoomPrompt(value)}
-    onCancel={() => completeRoomPrompt(null)}
-  />
-{/if}
+  {#if roomPrompt}
+    <RoomPrompt
+      title={roomPrompt.kind === 'room' ? 'Choose a room' : 'Choose your name'}
+      label={roomPrompt.kind === 'room' ? 'Room name' : 'Display name'}
+      initialValue={roomPrompt.initialValue}
+      onSubmit={(value) => completeRoomPrompt(value)}
+      onCancel={() => completeRoomPrompt(null)}
+    />
+  {/if}
 
-<CameraStage
+  <CameraStage
     bind:videoEl
     bind:previewContainerEl
     roomName={room.activeRoomName}
@@ -284,9 +280,20 @@
     isApplyingQuality={media.isApplyingQuality}
     cameraState={media.cameraState}
     microphoneState={media.microphoneState}
+    model={effects.state.model}
+    showLandmarksDebug={effects.state.showLandmarksDebug}
     onQualityChange={(q) => media.setQuality(q)}
     onVideoDeviceChange={(id) => media.setVideoDevice(id)}
     onAudioDeviceChange={(id) => media.setAudioDevice(id)}
+    onUploadModel={(file) => effects.handleUploadModel(file)}
+    onToggleModelEnabled={() => effects.toggleModelEnabled()}
+    onModelScaleChange={(value) => effects.setModelScale(value)}
+    onModelOffsetXChange={(value) => effects.setModelOffsetX(value)}
+    onModelOffsetYChange={(value) => effects.setModelOffsetY(value)}
+    onModelRotationYChange={(value) => effects.setModelRotationY(value)}
+    onResetModelTransform={() => effects.resetModelTransform()}
+    onClearModel={() => void effects.handleUploadModel(null)}
+    onToggleLandmarksDebug={() => effects.toggleLandmarksDebug()}
   />
 
   <div class="banners">
@@ -322,27 +329,8 @@
           backgroundKind={effects.state.background.kind}
           onUploadBackground={(file) => effects.handleUploadBackground(file)}
           onResetBackground={() => effects.clearBackground()}
-          modelEnabled={effects.state.model.enabled}
-          modelName={effects.state.model.name}
-          modelScale={effects.state.model.scale}
-          modelOffsetX={effects.state.model.offsetX}
-          modelOffsetY={effects.state.model.offsetY}
-          modelRotationY={effects.state.model.rotationY}
-          showLandmarksDebug={effects.state.showLandmarksDebug}
-          onUploadModel={(file) => effects.handleUploadModel(file)}
-          onToggleModelEnabled={() => effects.toggleModelEnabled()}
-          onModelScaleChange={(v) => effects.setModelScale(v)}
-          onModelOffsetXChange={(v) => effects.setModelOffsetX(v)}
-          onModelOffsetYChange={(v) => effects.setModelOffsetY(v)}
-          onModelRotationYChange={(v) => effects.setModelRotationY(v)}
-          onResetModelTransform={() => effects.resetModelTransform()}
-          onClearModel={() => {
-            effects.setModelEnabled(false);
-            void effects.handleUploadModel(null);
-          }}
-          cutoutsEnabled={effects.state.cutouts.enabled}
-          onToggleCutouts={() => effects.toggleCutoutsEnabled()}
-          onToggleLandmarksDebug={() => effects.toggleLandmarksDebug()}
+          demoModelActive={effects.state.model.source === 'demo'}
+          onToggleDemoModel={() => effects.toggleDemoModel()}
         />
 
         <PillButton

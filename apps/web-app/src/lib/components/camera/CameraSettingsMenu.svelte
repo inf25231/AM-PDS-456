@@ -13,9 +13,11 @@
 <script lang="ts">
   import type { DeviceOption } from 'camera-core';
   import MediaPopover from '$lib/components/camera/MediaPopover.svelte';
+  import ModelSettings from './ModelSettings.svelte';
   import settingsIcon from '$lib/images/settings.svg';
   import closeIcon from '$lib/images/x-close.svg';
   import type { CameraState, VideoQuality } from 'camera-core';
+  import type { ModelState } from '$lib/camera/effects';
 
   type Props = {
     selectedQuality: VideoQuality;
@@ -26,9 +28,20 @@
     isApplyingQuality?: boolean;
     cameraState?: CameraState;
     microphoneState?: CameraState;
+    model: ModelState;
+    showLandmarksDebug: boolean;
     onQualityChange: (q: VideoQuality) => void | Promise<void>;
     onVideoDeviceChange: (id: string) => void | Promise<void>;
     onAudioDeviceChange: (id: string) => void | Promise<void>;
+    onUploadModel: (file: File) => void | Promise<void>;
+    onToggleModelEnabled: () => void;
+    onModelScaleChange: (value: number) => void;
+    onModelOffsetXChange: (value: number) => void;
+    onModelOffsetYChange: (value: number) => void;
+    onModelRotationYChange: (value: number) => void;
+    onResetModelTransform: () => void;
+    onClearModel: () => void;
+    onToggleLandmarksDebug: () => void;
   };
 
   let {
@@ -40,14 +53,22 @@
     isApplyingQuality = false,
     cameraState = 'idle',
     microphoneState = 'idle',
+    model,
+    showLandmarksDebug,
     onQualityChange,
     onVideoDeviceChange,
-    onAudioDeviceChange
+    onAudioDeviceChange,
+    onUploadModel,
+    onToggleModelEnabled,
+    onModelScaleChange,
+    onModelOffsetXChange,
+    onModelOffsetYChange,
+    onModelRotationYChange,
+    onResetModelTransform,
+    onClearModel,
+    onToggleLandmarksDebug
   }: Props = $props();
 
-  // Resolution only -- the delivered frame rate is capped separately by
-  // COMPOSITION_FPS (see constants.ts) and doesn't change with quality, so
-  // no fps claim belongs in this label.
   const VIDEO_QUALITY_LABELS: Record<VideoQuality, string> = {
     '360p': '360p',
     '480p': '480p',
@@ -123,6 +144,20 @@
         </select>
       </span>
     </label>
+
+    <ModelSettings
+      {model}
+      {showLandmarksDebug}
+      {onUploadModel}
+      {onToggleModelEnabled}
+      {onModelScaleChange}
+      {onModelOffsetXChange}
+      {onModelOffsetYChange}
+      {onModelRotationYChange}
+      {onResetModelTransform}
+      {onClearModel}
+      {onToggleLandmarksDebug}
+    />
   </div>
 </MediaPopover>
 

@@ -18,6 +18,7 @@
   import CameraSettingsMenu from './CameraSettingsMenu.svelte';
   import type { CameraState, VideoQuality } from 'camera-core';
   import type { DeviceOption } from 'camera-core';
+  import type { ModelState } from '$lib/camera/effects';
 
   type Props = {
     // Room state
@@ -34,9 +35,20 @@
     isApplyingQuality: boolean;
     cameraState: CameraState;
     microphoneState: CameraState;
+    model: ModelState;
+    showLandmarksDebug: boolean;
     onQualityChange: (q: VideoQuality) => void | Promise<void>;
     onVideoDeviceChange: (id: string) => void | Promise<void>;
     onAudioDeviceChange: (id: string) => void | Promise<void>;
+    onUploadModel: (file: File) => void | Promise<void>;
+    onToggleModelEnabled: () => void;
+    onModelScaleChange: (value: number) => void;
+    onModelOffsetXChange: (value: number) => void;
+    onModelOffsetYChange: (value: number) => void;
+    onModelRotationYChange: (value: number) => void;
+    onResetModelTransform: () => void;
+    onClearModel: () => void;
+    onToggleLandmarksDebug: () => void;
   };
 
   let {
@@ -51,9 +63,20 @@
     isApplyingQuality,
     cameraState,
     microphoneState,
+    model,
+    showLandmarksDebug,
     onQualityChange,
     onVideoDeviceChange,
-    onAudioDeviceChange
+    onAudioDeviceChange,
+    onUploadModel,
+    onToggleModelEnabled,
+    onModelScaleChange,
+    onModelOffsetXChange,
+    onModelOffsetYChange,
+    onModelRotationYChange,
+    onResetModelTransform,
+    onClearModel,
+    onToggleLandmarksDebug
   }: Props = $props();
 
   const showRoomActions = $derived(
@@ -76,9 +99,20 @@
     {isApplyingQuality}
     {cameraState}
     {microphoneState}
+    {model}
+    {showLandmarksDebug}
     {onQualityChange}
     {onVideoDeviceChange}
     {onAudioDeviceChange}
+    {onUploadModel}
+    {onToggleModelEnabled}
+    {onModelScaleChange}
+    {onModelOffsetXChange}
+    {onModelOffsetYChange}
+    {onModelRotationYChange}
+    {onResetModelTransform}
+    {onClearModel}
+    {onToggleLandmarksDebug}
   />
 </div>
 

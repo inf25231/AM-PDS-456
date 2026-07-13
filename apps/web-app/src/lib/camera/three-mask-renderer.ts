@@ -56,6 +56,7 @@ export class ThreeMaskRenderer {
   private readonly loader: GLTFLoader;
   private modelObject: THREE.Object3D | null = null;
   private modelUrl: string | null = null;
+  private modelLoadVersion = 0;
   private width = 1;
   private height = 1;
   /** Model's real width after being normalized to a unit max-dimension at load time. */
@@ -70,10 +71,7 @@ export class ThreeMaskRenderer {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
-      // Disabled: WebGL antialiasing competes with MediaPipe's GPU face
-      // inference for GPU budget, causing severe fps drops on mobile with
-      // negligible visible benefit for a small overlay mask.
-      antialias: false
+      antialias: true
     });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.setPixelRatio(1);
@@ -132,6 +130,7 @@ export class ThreeMaskRenderer {
       return 0;
     }
 
+    const loadVersion = ++this.modelLoadVersion;
     this.modelUrl = url;
 
     if (this.modelObject) {
@@ -146,6 +145,10 @@ export class ThreeMaskRenderer {
 
     const gltf = await this.loader.loadAsync(url);
     const model = gltf.scene;
+    if (loadVersion !== this.modelLoadVersion) {
+      this.disposeObject(model);
+      return 0;
+    }
 
     const box = new THREE.Box3().setFromObject(model);
     const center = new THREE.Vector3();
