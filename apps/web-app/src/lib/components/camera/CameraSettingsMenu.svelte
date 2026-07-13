@@ -5,10 +5,12 @@
       - Video quality
       - Camera device
       - Microphone device
+      - Face landmarks debug overlay
+      - Custom and demo 3D model controls
 
     All state changes are forwarded to the parent via `on*Change` callbacks —
-    no internal mutation, no $bindable. The MediaController is the single
-    source of truth.
+    no internal mutation, no $bindable. MediaController and EffectsController
+    remain the respective sources of truth.
 -->
 <script lang="ts">
   import type { DeviceOption } from 'camera-core';

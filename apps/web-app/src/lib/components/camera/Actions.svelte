@@ -26,7 +26,7 @@
     onCreate: () => void;
     onJoin: () => void;
 
-    // Settings menu props (forwarded as-is)
+    // Camera and effects settings forwarded to CameraSettingsMenu.
     selectedQuality: VideoQuality;
     selectedVideoDeviceId: string;
     selectedAudioDeviceId: string;
