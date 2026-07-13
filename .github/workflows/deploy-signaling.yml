@@ -46,8 +46,7 @@ jobs:
             cd "$REPO_DIR"
             git fetch origin main
             git reset --hard origin/main
-            corepack enable
-            pnpm --filter signaling-server install --frozen-lockfile --prod
+            corepack pnpm --filter signaling-server install --frozen-lockfile --prod
 
             cd "$APP_DIR"
 
