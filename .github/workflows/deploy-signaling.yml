@@ -8,6 +8,9 @@ on:
       - main
     paths:
       - 'apps/signaling-server/**' # trigger only when files in signaling server root change
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/deploy-signaling.yml'
 
 concurrency:
@@ -31,17 +34,17 @@ jobs:
           script: |
             set -Eeuo pipefail
 
-            APP_DIR="$HOME/AM-PDS-456/apps/signaling-server"
+            REPO_DIR="$HOME/AM-PDS-456"
+            APP_DIR="$REPO_DIR/apps/signaling-server"
 
             echo "::group::Deploy"
-            cd "$APP_DIR"
+            cd "$REPO_DIR"
             git fetch origin main
             git reset --hard origin/main
-            if [ -f package-lock.json ]; then
-              npm ci --omit=dev
-            else
-              npm install --omit=dev
-            fi
+            corepack enable
+            pnpm --filter signaling-server install --frozen-lockfile --prod
+
+            cd "$APP_DIR"
 
             cat > .env << 'EOF'
             PORT=${{ secrets.PORT }}

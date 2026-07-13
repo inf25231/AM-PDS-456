@@ -5,7 +5,10 @@
   "packageManager": "pnpm@10.22.0",
   "scripts": {
     "web:dev": "pnpm --filter web-app dev",
+    "web:build": "pnpm --filter web-app build",
+    "web:preview": "pnpm --filter web-app preview",
     "signal:dev": "pnpm --filter signaling-server dev",
+    "signal:start": "pnpm --filter signaling-server start",
     "build": "pnpm -r build",
     "check": "pnpm -r check",
     "lint": "eslint .",
