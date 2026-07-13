@@ -18,8 +18,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate:
+    name: Validate before deploy
+    uses: ./.github/workflows/ci.yml
+
   deploy:
     name: Deploy to production
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -60,6 +65,14 @@ jobs:
               pm2 start src/index.js --name signaling
             fi
             pm2 save
+            echo "::endgroup::"
+
+            echo "::group::Health check"
+            if ! curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-connrefused \
+              "http://127.0.0.1:${{ secrets.PORT }}/health"; then
+              pm2 logs signaling --lines 100 --nostream
+              exit 1
+            fi
             echo "::endgroup::"
 
             echo "::group::PM2 status"

@@ -53,9 +53,9 @@ pnpm web:build
 pnpm web:preview
 ```
 
-`web:preview` is only for local verification of a production build. The
-web-app uses `adapter-auto`, so its deployed runtime is selected by the
-hosting platform.
+`web:preview` is only for local verification of a production build. Normal
+web builds use `adapter-auto`, so their deployed runtime is selected by the
+hosting platform. The Docker build explicitly uses the Node adapter.
 
 To test a production build locally without a reverse proxy, run the signaling
 server with the preview origin allowed, then build the web app with its direct
@@ -72,6 +72,40 @@ pnpm web:preview
 
 In an actual deployment, configure a reverse proxy for `/api` or set
 `VITE_SIGNALING_PREFIX` to the public signaling-server URL at build time.
+
+## Docker
+
+Docker runs the web app and signaling server in separate containers. LiveKit
+remains an external service.
+
+```bash
+cp apps/signaling-server/.env.example apps/signaling-server/.env
+# Fill in only the three LIVEKIT_* values in apps/signaling-server/.env.
+pnpm docker:up
+```
+
+Open `http://localhost:3000`. The browser reaches the signaling server through
+`http://localhost:8080`. The Docker configuration already allows the matching
+local CORS origin, so no other values are needed.
+
+The `pnpm docker:*` commands are short aliases for Docker Compose. The direct
+Docker commands are:
+
+```bash
+docker compose up --build --detach                 # both services
+docker compose up --build --detach signaling       # signaling server only
+docker compose up --build --detach --no-deps web   # web app only
+docker compose down
+```
+
+The equivalent short commands are:
+
+```bash
+pnpm docker:up
+pnpm docker:server
+pnpm docker:web
+pnpm docker:down
+```
 
 ## Run The Signaling Server
 
