@@ -1,5 +1,5 @@
 <!--
-    Camera route.
+    Main camera page.
 
     This file is the orchestration layer for the full camera page. It wires
     together four controllers and renders the visual stage. The controllers
@@ -37,14 +37,14 @@
   import eyeOpenIcon from '$lib/images/eye-open.svg';
   import eyeClosedIcon from '$lib/images/eye-close.svg';
 
-  import EffectsMenu from '$lib/components/camera/EffectsMenu.svelte';
-  import MediaControls from '$lib/components/camera/MediaControls.svelte';
-  import PillButton from '$lib/components/camera/PillButton.svelte';
-  import Banner from '$lib/components/camera/Banner.svelte';
-  import Actions from '$lib/components/camera/Actions.svelte';
-  import CameraStage from '$lib/components/camera/CameraStage.svelte';
-  import RoomPrompt from '$lib/components/camera/RoomPrompt.svelte';
-  import ToggleIcon from '$lib/components/camera/ToggleIcon.svelte';
+  import EffectsMenu from '$lib/components/EffectsMenu.svelte';
+  import MediaControls from '$lib/components/MediaControls.svelte';
+  import PillButton from '$lib/components/PillButton.svelte';
+  import Banner from '$lib/components/Banner.svelte';
+  import Actions from '$lib/components/Actions.svelte';
+  import CameraStage from '$lib/components/CameraStage.svelte';
+  import RoomPrompt from '$lib/components/RoomPrompt.svelte';
+  import ToggleIcon from '$lib/components/ToggleIcon.svelte';
 
   // --- DOM refs ---
   let videoEl = $state<HTMLVideoElement | null>(null);
@@ -369,6 +369,31 @@
 </div>
 
 <style>
+  .effects-anchor {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .banners {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: max-content;
+    max-width: min(90vw, 480px);
+    align-items: center;
+    pointer-events: none;
+    transform: translateX(-50%);
+  }
+
+  .banners > :global(*) {
+    pointer-events: auto;
+  }
+
   .connection-status {
     position: absolute;
     z-index: 30;
@@ -400,6 +425,12 @@
   @keyframes spin {
     to {
       transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .banners {
+      top: calc(var(--control-corner-offset) + var(--control-size) + 0.75rem);
     }
   }
 </style>

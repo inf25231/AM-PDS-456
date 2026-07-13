@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
   import type { DeviceOption } from '$lib/camera/core';
-  import MediaPopover from '$lib/components/camera/MediaPopover.svelte';
+  import MediaPopover from '$lib/components/MediaPopover.svelte';
   import settingsIcon from '$lib/images/settings.svg';
   import closeIcon from '$lib/images/x-close.svg';
   import type { CameraState, VideoQuality } from '$lib/camera/core';

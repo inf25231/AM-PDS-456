@@ -117,4 +117,18 @@
     transform: translateX(-50%);
     transform-origin: bottom center;
   }
+
+  .control-icon {
+    display: block;
+    width: 26px;
+    height: 26px;
+    filter: invert(1);
+  }
+
+  @media (min-width: 641px) {
+    .control-icon {
+      width: 30px;
+      height: 30px;
+    }
+  }
 </style>

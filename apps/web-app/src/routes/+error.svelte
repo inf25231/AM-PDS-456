@@ -20,8 +20,6 @@
 </main>
 
 <style>
-  @import '$lib/styles/shared-ui.css';
-
   .error-page {
     min-height: 100dvh;
     box-sizing: border-box;
@@ -42,5 +40,33 @@
     font-weight: 800;
     letter-spacing: -0.04em;
     color: #d4d4d8;
+  }
+
+  .ui-center-content {
+    width: min(560px, 100%);
+    text-align: center;
+  }
+
+  .ui-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 1.6rem;
+  }
+
+  .ui-ghost-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.7rem 1rem;
+    border: 1px solid rgba(212, 212, 216, 0.25);
+    border-radius: 999px;
+    background: transparent;
+    color: #f4f4f5;
+    cursor: pointer;
+    font: inherit;
+    line-height: 1;
+    text-decoration: none;
   }
 </style>
