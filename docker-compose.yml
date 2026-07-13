@@ -6,7 +6,8 @@ services:
     env_file:
       - apps/signaling-server/.env
     environment:
-      CORS_ORIGIN: http://localhost:3000
+      NODE_ENV: ${NODE_ENV:-production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
     ports:
       - '8080:8080'
     healthcheck:
@@ -21,7 +22,7 @@ services:
       context: .
       dockerfile: apps/web-app/Dockerfile
       args:
-        VITE_SIGNALING_PREFIX: http://localhost:8080
+        VITE_SIGNALING_PREFIX: ${VITE_SIGNALING_PREFIX:-http://localhost:8080}
     depends_on:
       signaling:
         condition: service_healthy

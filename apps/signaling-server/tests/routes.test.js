@@ -150,4 +150,16 @@ describe('routes (integration)', () => {
     const body = await res.json();
     assert.equal(body.ok, false);
   });
+
+  test('POST join returns 400 for an overlong username', async () => {
+    const res = await fetch(`${baseUrl}/rooms/math/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'a'.repeat(65) })
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.ok, false);
+    assert.match(body.error, /at most 64 characters/);
+  });
 });

@@ -75,6 +75,17 @@ Open `http://localhost:3000`. The browser reaches the signaling server through
 `http://localhost:8080`. The Docker configuration already allows the matching
 local CORS origin, so no other values are needed.
 
+For a public server, set production values before building:
+
+```bash
+# In apps/signaling-server/.env:
+#   CORS_ORIGIN=https://your-web-domain
+VITE_SIGNALING_PREFIX=https://your-signaling-domain pnpm docker:up
+```
+
+If your reverse proxy forwards `https://your-web-domain/api` to signaling,
+use `VITE_SIGNALING_PREFIX=/api`.
+
 The `pnpm docker:*` commands are short aliases for Docker Compose. The direct
 Docker commands are:
 

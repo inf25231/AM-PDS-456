@@ -44,8 +44,10 @@ For production, set the `CORS_ORIGIN` GitHub Actions secret to the public
 web-app URL. Multiple origins can be comma-separated. Do not use `*` for a
 public deployment.
 
-Docker is for local use and fixes its CORS origin to
-`http://localhost:3000`.
+Docker Compose now reads `CORS_ORIGIN` from environment too:
+
+- default: `http://localhost:3000` (local)
+- public deploy: set `CORS_ORIGIN=https://your-web-domain`
 
 ## Docker
 
@@ -56,4 +58,16 @@ docker compose up --build --detach                 # both services
 docker compose up --build --detach signaling       # signaling server only
 docker compose up --build --detach --no-deps web   # web app only
 docker compose down
+```
+
+For public Docker deploy, build web with the public signaling URL:
+
+```bash
+VITE_SIGNALING_PREFIX=https://your-signaling-domain docker compose up --build --detach
+```
+
+If reverse proxy routes `/api` on the web domain to signaling, use:
+
+```bash
+VITE_SIGNALING_PREFIX=/api docker compose up --build --detach
 ```

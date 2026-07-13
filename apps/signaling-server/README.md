@@ -68,7 +68,12 @@ characters removed, max 64 chars), so `"Math 101!"` becomes `math-101`.
 
 Optional:
 
-- `CORS_ORIGIN` (default `*`)
+- `CORS_ORIGIN` (default `*` in development)
+
+Production note:
+
+- In `NODE_ENV=production`, `CORS_ORIGIN` must be explicitly set (wildcard `*`
+  is rejected at startup).
 
 ## Run
 
