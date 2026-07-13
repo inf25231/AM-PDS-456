@@ -3,6 +3,8 @@
  * Handlers reply { ok: true, ... } on success or { ok: false, error } on failure;
  * unexpected errors are passed to next(error).
  */
+const MAX_USERNAME_LENGTH = 64;
+
 export function registerRoutes(
   app,
   { config, logger, livekit, roomRegistry, roomService, isRoomMissingError }
@@ -95,6 +97,10 @@ export function registerRoutes(
   app.get('/rooms/:roomName', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
+      if (!roomName) {
+        return res.status(400).json({ ok: false, error: 'Invalid room name' });
+      }
+
       const room = await livekit.getRoom(roomName);
       if (!room) {
         return res.status(404).json({ ok: false, error: 'Room not found' });
@@ -112,25 +118,20 @@ export function registerRoutes(
   app.patch('/rooms/:roomName', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
+      if (!roomName) {
+        return res.status(400).json({ ok: false, error: 'Invalid room name' });
+      }
 
       let current = roomRegistry.get(roomName);
       if (!current) {
         current = roomRegistry.ensureRoom(roomName);
       }
 
-      // pick the new display name: body wins, then current, then room name
-      let nextDisplayName = roomName;
-      if (req.body?.displayName) {
-        nextDisplayName = req.body.displayName;
-      } else if (current.displayName) {
-        nextDisplayName = current.displayName;
-      }
-      nextDisplayName = nextDisplayName.trim() || roomName;
+      const requestedDisplayName = String(req.body?.displayName || '').trim();
+      const nextDisplayName = requestedDisplayName || current.displayName || roomName;
 
-      let patchMetadata = {};
-      if (typeof req.body?.metadata === 'object' && req.body?.metadata) {
-        patchMetadata = req.body.metadata;
-      }
+      const patchMetadata =
+        req.body?.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : {};
 
       const nextMetadata = {
         ...(current.metadata || {}),
@@ -165,6 +166,10 @@ export function registerRoutes(
   app.delete('/rooms/:roomName', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
+      if (!roomName) {
+        return res.status(400).json({ ok: false, error: 'Invalid room name' });
+      }
+
       await livekit.deleteRoom(roomName);
       roomRegistry.remove(roomName);
 
@@ -179,6 +184,10 @@ export function registerRoutes(
   app.get('/rooms/:roomName/participants', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
+      if (!roomName) {
+        return res.status(400).json({ ok: false, error: 'Invalid room name' });
+      }
+
       const participants = await roomService.syncRoomParticipants(roomName);
 
       logger.action('room.participants_checked', {
@@ -206,6 +215,13 @@ export function registerRoutes(
     const username = String(rawUsername || '').trim();
     if (!roomName || !username) {
       return { ok: false, status: 400, error: 'room and username are required' };
+    }
+    if (username.length > MAX_USERNAME_LENGTH) {
+      return {
+        ok: false,
+        status: 400,
+        error: `username must be at most ${MAX_USERNAME_LENGTH} characters`
+      };
     }
 
     const room = await livekit.getRoom(roomName);
@@ -278,6 +294,10 @@ export function registerRoutes(
   app.post('/rooms/:roomName/cleanup', async (req, res, next) => {
     try {
       const roomName = livekit.normalizeRoomName(req.params.roomName);
+      if (!roomName) {
+        return res.status(400).json({ ok: false, error: 'Invalid room name' });
+      }
+
       const participants = await roomService.syncRoomParticipants(roomName);
       if (participants.length > 0) {
         return res.status(409).json({

@@ -5,7 +5,7 @@ import { getServerConfig, assertConfig } from '../src/config.js';
 
 // getServerConfig reads from process.env, so we save and restore the relevant
 // variables around each test to keep them isolated.
-const ENV_KEYS = ['PORT', 'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'CORS_ORIGIN'];
+const ENV_KEYS = ['PORT', 'NODE_ENV', 'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'CORS_ORIGIN'];
 
 let savedEnv;
 
@@ -79,5 +79,19 @@ describe('assertConfig', () => {
     setValidEnv();
     process.env.PORT = 'not-a-number';
     assert.throws(() => assertConfig(getServerConfig()), /PORT/);
+  });
+
+  test('rejects wildcard CORS in production', () => {
+    setValidEnv();
+    process.env.NODE_ENV = 'production';
+    process.env.CORS_ORIGIN = '*';
+    assert.throws(() => assertConfig(getServerConfig()), /CORS_ORIGIN/);
+  });
+
+  test('accepts explicit CORS allowlist in production', () => {
+    setValidEnv();
+    process.env.NODE_ENV = 'production';
+    process.env.CORS_ORIGIN = 'https://web.example.com';
+    assert.doesNotThrow(() => assertConfig(getServerConfig()));
   });
 });

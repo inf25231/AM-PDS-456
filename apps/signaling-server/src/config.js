@@ -28,11 +28,12 @@ function parseAllowedOrigin(rawValue) {
 /**
  * Reads and returns the full server configuration from environment variables.
  * Does NOT validate — call assertConfig() separately.
- * @returns {{ port: number, livekitUrl: string, livekitApiKey: string, livekitApiSecret: string, roomEmptyTtlMs: number, roomSweepIntervalMs: number, allowedOrigin: string | string[] }}
+ * @returns {{ port: number, nodeEnv: string, livekitUrl: string, livekitApiKey: string, livekitApiSecret: string, roomEmptyTtlMs: number, roomSweepIntervalMs: number, allowedOrigin: string | string[] }}
  */
 export function getServerConfig() {
   return {
     port: Number(process.env.PORT),
+    nodeEnv: process.env.NODE_ENV || 'development',
     livekitUrl: process.env.LIVEKIT_URL || '',
     livekitApiKey: process.env.LIVEKIT_API_KEY || '',
     livekitApiSecret: process.env.LIVEKIT_API_SECRET || '',
@@ -54,6 +55,9 @@ export function assertConfig(config) {
   if (!config.livekitUrl) missing.push('LIVEKIT_URL');
   if (!config.livekitApiKey) missing.push('LIVEKIT_API_KEY');
   if (!config.livekitApiSecret) missing.push('LIVEKIT_API_SECRET');
+  if (config.nodeEnv === 'production' && config.allowedOrigin === '*') {
+    missing.push('CORS_ORIGIN (must not be "*")');
+  }
 
   if (missing.length > 0) {
     throw new Error(`Missing required env vars: ${missing.join(', ')}`);
