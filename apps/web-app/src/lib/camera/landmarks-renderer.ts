@@ -1,4 +1,4 @@
-import { FACE_OVAL_INDICES } from 'camera-core';
+import { FACE_OVAL_INDICES } from '$lib/camera/core';
 import type { FaceLandmarkerResult } from '$lib/camera/tracking';
 
 type Landmark2D = readonly [x: number, y: number];

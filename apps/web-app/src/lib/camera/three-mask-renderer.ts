@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { CameraEffectsState } from '$lib/camera/effects';
-import { FACE_OVAL_INDICES, computeCoverTransform, averagePoint, getBBox } from 'camera-core';
+import { FACE_OVAL_INDICES, computeCoverTransform, averagePoint, getBBox } from '$lib/camera/core';
 import type { FaceLandmarkerResult } from '$lib/camera/tracking';
 
 type Landmark = { x: number; y: number; z: number };

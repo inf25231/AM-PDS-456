@@ -7,7 +7,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
+    "test": "node --test src/lib/camera/core/**/*.test.ts"
   },
   "devDependencies": {
     "@fontsource/fira-mono": "^5.2.7",
@@ -25,7 +26,6 @@
     "vite": "^8.0.7"
   },
   "dependencies": {
-    "camera-core": "workspace:*",
     "three": "^0.179.1",
     "livekit-client": "^2.19.0",
     "vercel": "^54.0.0",

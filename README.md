@@ -1,6 +1,6 @@
 # Amphi Calls
 
-Small pnpm workspace with two apps and a shared package:
+Small pnpm workspace with two apps:
 
 - `apps/web-app` — SvelteKit client: camera capture, face tracking, 3D-mask
   and background effects, LiveKit video calls.
@@ -8,8 +8,6 @@ Small pnpm workspace with two apps and a shared package:
   issues join tokens and manages room lifecycle; media never passes through
   it). See `apps/signaling-server/README.md` for the full API, project
   structure, and environment variables.
-- `packages/camera-core` — shared pure/Svelte-free camera helpers (device
-  enumeration, quality presets, settings persistence) used by `web-app`.
 
 ## Environment
 
@@ -82,6 +80,12 @@ Run signaling-server tests:
 
 ```bash
 pnpm --filter signaling-server test
+```
+
+Run the web app's camera helper tests:
+
+```bash
+pnpm --filter web-app test
 ```
 
 ## Typical Local Flow

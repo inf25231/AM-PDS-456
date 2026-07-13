@@ -6,7 +6,7 @@
   import loadingIcon from '$lib/images/loading.svg';
   import cameraOffIcon from '$lib/images/camera-off.svg';
 
-  import type { CameraState } from 'camera-core';
+  import type { CameraState } from '$lib/camera/core';
   import type { RoomConnectionState } from '$lib/camera/controllers/room.svelte';
 
   type Props = {

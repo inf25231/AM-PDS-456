@@ -53,9 +53,6 @@ importers:
       '@mediapipe/tasks-vision':
         specifier: 0.10.0
         version: 0.10.0
-      camera-core:
-        specifier: workspace:*
-        version: link:../../packages/camera-core
       livekit-client:
         specifier: ^2.19.0
         version: 2.19.0(@types/dom-mediacapture-record@1.0.22)
@@ -105,8 +102,6 @@ importers:
       vite:
         specifier: ^8.0.7
         version: 8.0.14(@types/node@25.9.1)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0)
-
-  packages/camera-core: {}
 
 packages:
 

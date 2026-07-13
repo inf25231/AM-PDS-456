@@ -45,16 +45,16 @@ import {
   type DeviceOption,
   type CameraState,
   type VideoQuality
-} from 'camera-core';
+} from '$lib/camera/core';
 import { getMediaErrorMessage } from '$lib/camera/errors';
 
 // ----------------------------------------------------------------------
 // Thin browser-facing media helpers (start/stop + attach to <video>).
 //
-// These wrap camera-core's plain getUserMedia calls with the DOM wiring the
+// These wrap the core getUserMedia helpers with the DOM wiring the
 // route needs: attaching the stream to the <video> element and clearing it
-// back out on stop. They stay here (not in camera-core) because they touch
-// an HTMLVideoElement, which is web-app/DOM-specific, not reusable core logic.
+// back out on stop. They stay here because they touch an HTMLVideoElement,
+// which is camera-route-specific rather than reusable core logic.
 // ----------------------------------------------------------------------
 
 async function attachCameraStream(videoEl: HTMLVideoElement, stream: MediaStream): Promise<void> {
