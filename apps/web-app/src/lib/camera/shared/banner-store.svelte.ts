@@ -59,10 +59,6 @@ export class BannerStore {
     this.#cancelTimeout('error');
   }
 
-  // ----------------------------------------------------------------------
-  // Internals
-  // ----------------------------------------------------------------------
-
   #set(channel: BannerChannel, message: string): void {
     if (this.#disposed) return;
 
