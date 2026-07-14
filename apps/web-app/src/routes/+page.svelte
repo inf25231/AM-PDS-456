@@ -10,10 +10,10 @@
   import '$lib/styles/camera-page.css';
   import { onDestroy, onMount } from 'svelte';
 
-  import { MediaController } from '$lib/camera/media/controller.svelte';
-  import { RoomController } from '$lib/camera/room/controller.svelte';
-  import { PublishController } from '$lib/camera/publish/controller.svelte';
-  import { EffectsController } from '$lib/camera/effects/controller.svelte';
+  import { MediaController } from '$lib/camera/media';
+  import { RoomController } from '$lib/camera/room';
+  import { PublishController } from '$lib/camera/publish';
+  import { EffectsController } from '$lib/camera/effects';
   import { BannerStore } from '$lib/camera/shared/banner-store.svelte';
 
   import cameraOff from '$lib/images/camera-off.svg';
@@ -120,8 +120,9 @@
   });
 
   const effects = new EffectsController({
-    media,
-    room,
+    getCameraEnabled: () => media.cameraEnabled,
+    getCameraState: () => media.cameraState,
+    getIsRoomConnected: () => room.isConnected,
     onInfo: showInfo,
     onError: showError,
     onCompositionReady: () => {

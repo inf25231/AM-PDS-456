@@ -1,4 +1,4 @@
-import { getVideoConstraintsByQuality, type VideoQuality } from './media.js';
+import { getVideoConstraintsByQuality, type VideoQuality } from './media.ts';
 
 /**
  * Persistent keys for camera preferences stored in localStorage.

@@ -10,10 +10,10 @@ import {
   type RemoteTrackPublication
 } from 'livekit-client';
 
-import { createRoom, joinRoom } from '$lib/camera/room/api/rooms-api.js';
-import { getRemoteMediaState } from '$lib/camera/room/core/participant-media.js';
-import { getMediaErrorMessage } from '$lib/camera/shared/errors.js';
-import type { MediaController } from '$lib/camera/media/controller.svelte';
+import { createRoom, joinRoom } from '$lib/camera/room/api/rooms-api.ts';
+import { getRemoteMediaState } from '$lib/camera/room/core/participant-media.ts';
+import { getMediaErrorMessage } from '$lib/camera/shared/errors.ts';
+import type { MediaController } from '$lib/camera/media';
 import { SvelteMap } from 'svelte/reactivity';
 
 export type RoomConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';

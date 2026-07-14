@@ -35,13 +35,13 @@ import {
   persistCameraPreferences,
   readCameraPreferences,
   type CameraPreferences
-} from '$lib/camera/media/core/settings.js';
+} from '$lib/camera/media/core/settings.ts';
 import {
   enumerateMediaDeviceOptions,
   getStreamTrackDeviceId,
   normalizeSelectedDeviceId,
   type DeviceOption
-} from '$lib/camera/media/core/devices.js';
+} from '$lib/camera/media/core/devices.ts';
 import {
   startCamera,
   startMicrophone,
@@ -49,8 +49,8 @@ import {
   stopMediaStream,
   type CameraState,
   type VideoQuality
-} from '$lib/camera/media/core/media.js';
-import { getMediaErrorMessage } from '$lib/camera/shared/errors.js';
+} from '$lib/camera/media/core/media.ts';
+import { getMediaErrorMessage } from '$lib/camera/shared/errors.ts';
 
 // ----------------------------------------------------------------------
 // Thin browser-facing media helpers (start/stop + attach to <video>).

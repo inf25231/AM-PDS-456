@@ -7,7 +7,7 @@
   import cameraOffIcon from '$lib/images/camera-off.svg';
 
   import type { CameraState } from '$lib/camera/media/core/media.ts';
-  import type { RoomConnectionState } from '$lib/camera/room/controller.svelte';
+  import type { RoomConnectionState } from '$lib/camera/room';
 
   type Props = {
     videoEl?: HTMLVideoElement;

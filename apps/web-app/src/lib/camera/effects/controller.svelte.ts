@@ -36,15 +36,13 @@ import {
   setModelFile,
   type CameraEffectsState,
   type WebcamVisibility
-} from '$lib/camera/effects/state.js';
-import { drawLandmarksDebug } from '$lib/camera/effects/renderers/landmarks-debug-renderer.js';
-import { ThreeMaskRenderer } from '$lib/camera/effects/renderers/three-mask-renderer.js';
-import { startFaceTracking, type FaceLandmarkerResult } from '$lib/camera/effects/tracking.js';
-import { getMediaErrorMessage } from '$lib/camera/shared/errors.js';
-import { COMPOSITION_FPS, FACE_TRACKING_FPS } from '$lib/camera/shared/constants.js';
-import type { MediaController } from '$lib/camera/media/controller.svelte';
-import type { RoomController } from '$lib/camera/room/controller.svelte';
-import { CompositionController } from './composition.svelte.js';
+} from '$lib/camera/effects/state.ts';
+import { drawLandmarksDebug } from '$lib/camera/effects/renderers/landmarks-debug-renderer.ts';
+import { ThreeMaskRenderer } from '$lib/camera/effects/renderers/three-mask-renderer.ts';
+import { startFaceTracking, type FaceLandmarkerResult } from '$lib/camera/effects/tracking.ts';
+import { getMediaErrorMessage } from '$lib/camera/shared/errors.ts';
+import { COMPOSITION_FPS, FACE_TRACKING_FPS } from '$lib/camera/shared/constants.ts';
+import { CompositionController } from './composition.svelte.ts';
 
 // ----------------------------------------------------------------------
 // Pure helper
@@ -59,8 +57,9 @@ export function shouldTrackFace(state: CameraEffectsState): boolean {
 // ----------------------------------------------------------------------
 
 export interface EffectsControllerOptions {
-  media: MediaController;
-  room: RoomController;
+  getCameraEnabled: () => boolean;
+  getCameraState: () => 'idle' | 'loading' | 'ready' | 'error';
+  getIsRoomConnected: () => boolean;
   onInfo?: (message: string) => void;
   onError?: (message: string) => void;
   onCompositionReady?: () => void;
@@ -82,7 +81,6 @@ export class EffectsController {
   tracking = $state(false);
 
   private readonly opts: EffectsControllerOptions;
-  private readonly media: MediaController;
 
   private elements: AttachedElements | null = null;
   private modelRenderer: ActiveMaskRenderer | null = null;
@@ -110,7 +108,6 @@ export class EffectsController {
 
   constructor(opts: EffectsControllerOptions) {
     this.opts = opts;
-    this.media = opts.media;
   }
 
   // ==================================================================
@@ -132,7 +129,7 @@ export class EffectsController {
       getVideoElement: () => this.elements?.video ?? null,
       getEffectsState: () => this.state,
       getFaceResult: () => this.latestFaceResult,
-      getCameraEnabled: () => this.media.cameraEnabled,
+      getCameraEnabled: this.opts.getCameraEnabled,
       renderBackground: (ctx, state) =>
         this.drawBackgroundFrame(ctx, ctx.canvas.width, ctx.canvas.height, state),
       renderModel: (ctx, state, faceResult) => this.renderModelLayer(ctx, state, faceResult),
@@ -241,7 +238,9 @@ export class EffectsController {
     }
 
     const canTrack =
-      shouldTrackFace(this.state) && this.media.cameraEnabled && this.media.cameraState === 'ready';
+      shouldTrackFace(this.state) &&
+      this.opts.getCameraEnabled() &&
+      this.opts.getCameraState() === 'ready';
 
     if (!canTrack) {
       this.stopTracking();
@@ -476,7 +475,7 @@ export class EffectsController {
   private syncCompositionFps(): void {
     if (!this.composition) return;
 
-    const fps = !this.opts.room.isConnected
+    const fps = !this.opts.getIsRoomConnected()
       ? COMPOSITION_FPS.IDLE
       : this.isMobileViewport
         ? COMPOSITION_FPS.CONNECTED_MOBILE

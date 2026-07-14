@@ -98,9 +98,8 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['$lib/camera/publish/**', '$lib/camera/media/core/**', '$lib/camera/room/core/**'],
-              message:
-                'effects must not depend on publish or other domains internals (core).'
+              group: ['$lib/camera/media/**', '$lib/camera/room/**', '$lib/camera/publish/**'],
+              message: 'effects must stay independent from media/room/publish domains.'
             }
           ]
         }
