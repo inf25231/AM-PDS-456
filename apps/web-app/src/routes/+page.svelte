@@ -10,11 +10,11 @@
   import '$lib/styles/camera-page.css';
   import { onDestroy, onMount } from 'svelte';
 
-  import { MediaController } from '$lib/camera/controllers/media.svelte';
-  import { RoomController } from '$lib/camera/controllers/room.svelte';
-  import { PublishController } from '$lib/camera/controllers/publish.svelte';
-  import { EffectsController } from '$lib/camera/controllers/effects.svelte';
-  import { BannerStore } from '$lib/camera/banner.svelte';
+  import { MediaController } from '$lib/camera/media/controller.svelte';
+  import { RoomController } from '$lib/camera/room/controller.svelte';
+  import { PublishController } from '$lib/camera/publish/controller.svelte';
+  import { EffectsController } from '$lib/camera/effects/controller.svelte';
+  import { BannerStore } from '$lib/camera/shared/banner-store.svelte';
 
   import cameraOff from '$lib/images/camera-off.svg';
   import cameraOn from '$lib/images/camera-on.svg';

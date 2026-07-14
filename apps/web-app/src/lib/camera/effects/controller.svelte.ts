@@ -1,4 +1,4 @@
-// src/lib/camera/controllers/effects.svelte.ts
+// src/lib/camera/effects/controller.svelte.ts
 
 /**
  * EffectsController
@@ -36,14 +36,14 @@ import {
   setModelFile,
   type CameraEffectsState,
   type WebcamVisibility
-} from '$lib/camera/effects';
-import { drawLandmarksDebug } from '$lib/camera/landmarks-renderer';
-import { ThreeMaskRenderer } from '$lib/camera/three-mask-renderer';
-import { startFaceTracking, type FaceLandmarkerResult } from '$lib/camera/tracking';
-import { getMediaErrorMessage } from '$lib/camera/errors';
-import { COMPOSITION_FPS, FACE_TRACKING_FPS } from '$lib/camera/constants';
-import type { MediaController } from './media.svelte.js';
-import type { RoomController } from './room.svelte.js';
+} from '$lib/camera/effects/state.js';
+import { drawLandmarksDebug } from '$lib/camera/effects/renderers/landmarks-debug-renderer.js';
+import { ThreeMaskRenderer } from '$lib/camera/effects/renderers/three-mask-renderer.js';
+import { startFaceTracking, type FaceLandmarkerResult } from '$lib/camera/effects/tracking.js';
+import { getMediaErrorMessage } from '$lib/camera/shared/errors.js';
+import { COMPOSITION_FPS, FACE_TRACKING_FPS } from '$lib/camera/shared/constants.js';
+import type { MediaController } from '$lib/camera/media/controller.svelte';
+import type { RoomController } from '$lib/camera/room/controller.svelte';
 import { CompositionController } from './composition.svelte.js';
 
 // ----------------------------------------------------------------------

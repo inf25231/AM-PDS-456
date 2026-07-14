@@ -1,7 +1,7 @@
 <!-- Quick effects: image background, the fixed demo raccoon, and preview visibility. -->
 <script lang="ts">
   import { scale } from 'svelte/transition';
-  import type { BackgroundKind } from '$lib/camera/effects';
+  import type { BackgroundKind } from '$lib/camera/effects/state.ts';
   import PillButton from './PillButton.svelte';
   import ToggleIcon from './ToggleIcon.svelte';
 

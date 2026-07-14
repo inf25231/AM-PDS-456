@@ -16,8 +16,9 @@
 <script lang="ts">
   import PillButton from './PillButton.svelte';
   import CameraSettingsMenu from './CameraSettingsMenu.svelte';
-  import type { CameraState, DeviceOption, VideoQuality } from '$lib/camera/core';
-  import type { ModelState } from '$lib/camera/effects';
+  import type { DeviceOption } from '$lib/camera/media/core/devices.ts';
+  import type { CameraState, VideoQuality } from '$lib/camera/media/core/media.ts';
+  import type { ModelState } from '$lib/camera/effects/state.ts';
 
   type Props = {
     // Room state

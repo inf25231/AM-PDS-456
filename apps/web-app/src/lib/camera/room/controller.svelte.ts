@@ -4,16 +4,16 @@ import {
   ConnectionQuality,
   Room,
   RoomEvent,
-  Track,
   type Participant,
   type RemoteParticipant,
   type RemoteTrack,
   type RemoteTrackPublication
 } from 'livekit-client';
 
-import { createRoom, joinRoom } from '$lib/calls/rooms-api';
-import { getMediaErrorMessage } from '$lib/camera/errors';
-import type { MediaController } from './media.svelte.js';
+import { createRoom, joinRoom } from '$lib/camera/room/api/rooms-api.js';
+import { getRemoteMediaState } from '$lib/camera/room/core/participant-media.js';
+import { getMediaErrorMessage } from '$lib/camera/shared/errors.js';
+import type { MediaController } from '$lib/camera/media/controller.svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 export type RoomConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -171,18 +171,7 @@ export class RoomController {
 
     for (const participant of this.room.remoteParticipants.values()) {
       const identity = participant.identity;
-
-      const hasRemoteCamera = [...participant.trackPublications.values()].some(
-        (p) =>
-          p.kind === 'video' && p.source === Track.Source.Camera && Boolean(p.track) && !p.isMuted
-      );
-      const hasRemoteMic = [...participant.trackPublications.values()].some(
-        (p) =>
-          p.kind === 'audio' &&
-          p.source === Track.Source.Microphone &&
-          Boolean(p.track) &&
-          !p.isMuted
-      );
+      const remoteMediaState = getRemoteMediaState(participant.trackPublications.values());
 
       tiles.push({
         id: identity,
@@ -190,8 +179,8 @@ export class RoomController {
         isLocal: false,
         isSpeaking: participant.isSpeaking,
         connectionQuality: this.qualityLabel(participant.connectionQuality),
-        cameraOn: hasRemoteCamera,
-        microphoneOn: hasRemoteMic,
+        cameraOn: remoteMediaState.cameraOn,
+        microphoneOn: remoteMediaState.microphoneOn,
         stream: this.participantStreams.get(identity) ?? null
       });
     }

@@ -1,4 +1,4 @@
-// src/lib/camera/controllers/media.svelte.ts
+// src/lib/camera/media/controller.svelte.ts
 
 /**
  * MediaController
@@ -34,19 +34,23 @@ import {
   getApplyConstraintCandidates,
   persistCameraPreferences,
   readCameraPreferences,
+  type CameraPreferences
+} from '$lib/camera/media/core/settings.js';
+import {
   enumerateMediaDeviceOptions,
   getStreamTrackDeviceId,
   normalizeSelectedDeviceId,
+  type DeviceOption
+} from '$lib/camera/media/core/devices.js';
+import {
   startCamera,
   startMicrophone,
   startCameraAndMicrophone,
   stopMediaStream,
-  type CameraPreferences,
-  type DeviceOption,
   type CameraState,
   type VideoQuality
-} from '$lib/camera/core';
-import { getMediaErrorMessage } from '$lib/camera/errors';
+} from '$lib/camera/media/core/media.js';
+import { getMediaErrorMessage } from '$lib/camera/shared/errors.js';
 
 // ----------------------------------------------------------------------
 // Thin browser-facing media helpers (start/stop + attach to <video>).

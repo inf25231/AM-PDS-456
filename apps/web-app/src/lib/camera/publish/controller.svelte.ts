@@ -1,4 +1,4 @@
-// src/lib/camera/controllers/publish.svelte.ts
+// src/lib/camera/publish/controller.svelte.ts
 
 /**
  * PublishController
@@ -24,9 +24,9 @@
 
 import { Track, type LocalTrackPublication } from 'livekit-client';
 
-import { getMediaErrorMessage } from '$lib/camera/errors';
-import type { MediaController } from './media.svelte.js';
-import type { RoomController } from './room.svelte.js';
+import { getMediaErrorMessage } from '$lib/camera/shared/errors.js';
+import type { MediaController } from '$lib/camera/media/controller.svelte';
+import type { RoomController } from '$lib/camera/room/controller.svelte';
 
 // ----------------------------------------------------------------------
 // Public types
