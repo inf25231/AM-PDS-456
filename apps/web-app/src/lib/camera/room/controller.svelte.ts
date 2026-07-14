@@ -4,10 +4,8 @@ import {
   ConnectionQuality,
   Room,
   RoomEvent,
-  type Participant,
   type RemoteParticipant,
-  type RemoteTrack,
-  type RemoteTrackPublication
+  type RemoteTrack
 } from 'livekit-client';
 
 import { createRoom, joinRoom } from './api/rooms-api.ts';
@@ -105,13 +103,13 @@ export class RoomController {
       this.connectionState = 'connecting';
       this.connectionStatus = mode === 'create' ? 'Creating room…' : 'Joining room…';
 
-      let targetRoomName = requestedRoomName;
+      let roomName = requestedRoomName;
       if (mode === 'create') {
         const createdRoom = await createRoom(requestedRoomName, requestedRoomName);
-        targetRoomName = createdRoom.room.name;
+        roomName = createdRoom.room.name;
       }
 
-      await this.connect(targetRoomName, username);
+      await this.connect(roomName, username);
     } catch (error) {
       this.connectionState = 'error';
       this.connectionStatus = '';
@@ -120,10 +118,8 @@ export class RoomController {
     }
   }
 
-  async leave(options: { restartMedia?: boolean } = {}): Promise<void> {
+  async leave(restartMedia = false): Promise<void> {
     if (this.disposed) return;
-
-    const { restartMedia = false } = options;
     this.sessionId += 1;
 
     if (!this.room) {
@@ -204,9 +200,6 @@ export class RoomController {
   }
 
   private async connect(roomName: string, username: string): Promise<void> {
-    this.sessionId += 1;
-    let activeSession = this.sessionId;
-
     let room: Room | null = null;
     this.connectionError = '';
     this.connectionState = 'connecting';
@@ -214,10 +207,10 @@ export class RoomController {
 
     try {
       if (this.room) {
-        await this.leave({ restartMedia: false });
-        this.sessionId += 1;
-        activeSession = this.sessionId;
+        await this.leave(false);
       }
+      this.sessionId += 1;
+      const activeSession = this.sessionId;
 
       const joinResponse = await joinRoom(roomName, username);
       room = new Room({
@@ -244,7 +237,7 @@ export class RoomController {
       for (const participant of room.remoteParticipants.values()) {
         for (const pub of participant.trackPublications.values()) {
           if (pub.isSubscribed && pub.track) {
-            this.addTrackToParticipantStream(participant, pub.track);
+            this.addParticipantTrack(participant.identity, pub.track.mediaStreamTrack, false);
           }
         }
       }
@@ -256,7 +249,7 @@ export class RoomController {
       try {
         await room?.disconnect();
       } catch {
-        // Ignore cleanup failures.
+        // ignore cleanup failure
       }
       this.room = null;
       this.activeRoomName = null;
@@ -285,26 +278,18 @@ export class RoomController {
 
     room.on(
       RoomEvent.TrackSubscribed,
-      (
-        track: RemoteTrack,
-        _publication: RemoteTrackPublication,
-        participant: RemoteParticipant
-      ) => {
+      (track: RemoteTrack, _publication, participant: RemoteParticipant) => {
         if (!isActiveSession()) return;
-        this.addTrackToParticipantStream(participant, track);
+        this.addParticipantTrack(participant.identity, track.mediaStreamTrack);
         this.opts.onRoomChanged?.('tracks-changed');
       }
     );
 
     room.on(
       RoomEvent.TrackUnsubscribed,
-      (
-        track: RemoteTrack,
-        _publication: RemoteTrackPublication,
-        participant: RemoteParticipant
-      ) => {
+      (track: RemoteTrack, _publication, participant: RemoteParticipant) => {
         if (!isActiveSession()) return;
-        this.removeTrackFromParticipantStream(participant, track);
+        this.removeParticipantTrack(participant.identity, track.mediaStreamTrack);
         this.opts.onRoomChanged?.('tracks-changed');
       }
     );
@@ -334,42 +319,34 @@ export class RoomController {
     });
   }
 
-  private addTrackToParticipantStream(
-    participant: Participant | RemoteParticipant,
-    track: unknown
+  private addParticipantTrack(
+    identity: string,
+    mediaTrack: MediaStreamTrack,
+    rebuildTiles = true
   ): void {
-    const mediaTrack = this.toMediaStreamTrack(track);
-    if (!mediaTrack) return;
-
-    const stream = this.getOrCreateParticipantStream(participant.identity);
-    const existing = stream
-      .getTracks()
-      .find((item) => item.id === mediaTrack.id || item.kind === mediaTrack.kind);
-    if (existing) {
-      stream.removeTrack(existing);
+    const stream = this.getOrCreateParticipantStream(identity);
+    for (const existingTrack of stream.getTracks()) {
+      if (existingTrack.id === mediaTrack.id || existingTrack.kind === mediaTrack.kind) {
+        stream.removeTrack(existingTrack);
+        break;
+      }
     }
     stream.addTrack(mediaTrack);
-    this.rebuildParticipantTiles();
+    if (rebuildTiles) this.rebuildParticipantTiles();
   }
 
-  private removeTrackFromParticipantStream(
-    participant: Participant | RemoteParticipant,
-    track: unknown
-  ): void {
-    const mediaTrack = this.toMediaStreamTrack(track);
-    if (!mediaTrack) return;
-
-    const stream = this.participantStreams.get(participant.identity);
+  private removeParticipantTrack(identity: string, mediaTrack: MediaStreamTrack): void {
+    const stream = this.participantStreams.get(identity);
     if (!stream) return;
 
-    for (const item of stream.getTracks()) {
-      if (item.id === mediaTrack.id || item.kind === mediaTrack.kind) {
-        stream.removeTrack(item);
+    for (const existingTrack of stream.getTracks()) {
+      if (existingTrack.id === mediaTrack.id || existingTrack.kind === mediaTrack.kind) {
+        stream.removeTrack(existingTrack);
       }
     }
 
     if (stream.getTracks().length === 0) {
-      this.participantStreams.delete(participant.identity);
+      this.participantStreams.delete(identity);
     }
 
     this.rebuildParticipantTiles();
@@ -486,17 +463,11 @@ export class RoomController {
 
   private qualityLabel(quality: ConnectionQuality | undefined): string {
     if (quality === undefined) return 'unknown';
-    const label =
-      typeof quality === 'number'
-        ? String((ConnectionQuality as unknown as Record<number, string>)[quality] || 'unknown')
-        : String(quality);
-    return label.toLowerCase();
-  }
-
-  private toMediaStreamTrack(track: unknown): MediaStreamTrack | null {
-    if (!track || typeof track !== 'object') return null;
-    const maybe = (track as { mediaStreamTrack?: MediaStreamTrack }).mediaStreamTrack;
-    return maybe instanceof MediaStreamTrack ? maybe : null;
+    const labelFromEnum = ConnectionQuality[quality];
+    if (typeof labelFromEnum === 'string') {
+      return labelFromEnum.toLowerCase();
+    }
+    return String(quality).toLowerCase();
   }
 
   isSessionActive(capturedId: number): boolean {
