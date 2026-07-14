@@ -81,31 +81,6 @@
     align-items: center;
   }
 
-  /* Cross-fade between open / close icons inside the toggle */
-  .icon-layer {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    opacity: 0;
-    transform: rotate(-90deg) scale(0.82);
-    transition:
-      transform 220ms ease,
-      opacity 220ms ease;
-  }
-
-  .icon-layer-visible {
-    opacity: 1;
-    transform: rotate(0deg) scale(1);
-  }
-
-  .popover-icon {
-    width: 30px;
-    height: 30px;
-    display: block;
-    filter: invert(1);
-  }
-
   /* Floating panel — anchored to the trigger via the .popover-anchor */
   .popover-panel {
     position: absolute;
@@ -144,11 +119,6 @@
   }
 
   @media (max-width: 640px) {
-    .popover-icon {
-      width: 26px;
-      height: 26px;
-    }
-
     .popover-panel {
       min-width: calc(100vw - 1.5rem);
       max-width: calc(100vw - 1.5rem);
