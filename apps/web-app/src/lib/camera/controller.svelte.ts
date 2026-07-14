@@ -1,3 +1,18 @@
+/**
+ * CameraController
+ *
+ * Root orchestrator for the camera page. It wires media, room, effects,
+ * and publish controllers together, and routes info/error banners + room
+ * prompt flow.
+ *
+ * Lifecycle:
+ *   const camera = new CameraController({ getVideoElement, getPreviewContainer });
+ *   await camera.mount();
+ *   camera.syncEffectsReactivity();
+ *   camera.syncParticipantTilesReactivity();
+ *   camera.dispose();
+ */
+
 import { EffectsController } from './effects/index.ts';
 import { MediaController } from './media/index.ts';
 import { PublishController } from './publish/index.ts';
@@ -34,7 +49,7 @@ export class CameraController {
 
     this.media = new MediaController({
       getVideoElement: this.opts.getVideoElement,
-      onError: (message) => this.showError(message),
+      onError: (message) => this.banner.showError(message),
       onMediaChanged: (reason) => this.onMediaChanged(reason)
     });
 
@@ -42,8 +57,8 @@ export class CameraController {
       media: this.media,
       promptRoomName: (previous) => this.requestRoomPrompt('room', previous),
       promptUserName: (previous) => this.requestRoomPrompt('user', previous),
-      onInfo: (message) => this.showInfo(message),
-      onError: (message) => this.showError(message),
+      onInfo: (message) => this.banner.showInfo(message),
+      onError: (message) => this.banner.showError(message),
       onRoomChanged: (reason) => this.onRoomChanged(reason)
     });
 
@@ -51,8 +66,8 @@ export class CameraController {
       getCameraEnabled: () => this.media.cameraEnabled,
       getCameraState: () => this.media.cameraState,
       getIsRoomConnected: () => this.room.isConnected,
-      onInfo: (message) => this.showInfo(message),
-      onError: (message) => this.showError(message),
+      onInfo: (message) => this.banner.showInfo(message),
+      onError: (message) => this.banner.showError(message),
       onCompositionReady: () => {
         this.publish?.queueSync();
       }
@@ -63,7 +78,7 @@ export class CameraController {
       media: this.media,
       room: this.room,
       getCompositionTrack: () => this.effects.compositionTrack,
-      onError: (message) => this.showError(message)
+      onError: (message) => this.banner.showError(message)
     });
   }
 
@@ -117,7 +132,7 @@ export class CameraController {
     const video = this.opts.getVideoElement();
     const previewContainer = this.opts.getPreviewContainer();
     if (!video || !previewContainer) {
-      this.showError('Camera stage is not ready. Please refresh the page.');
+      this.banner.showError('Camera stage is not ready. Please refresh the page.');
       return;
     }
 
@@ -144,14 +159,6 @@ export class CameraController {
     this.room.dispose();
     this.media.dispose();
     this.banner.dispose();
-  }
-
-  private showInfo(message: string): void {
-    this.banner.showInfo(message);
-  }
-
-  private showError(message: string): void {
-    this.banner.showError(message);
   }
 
   private requestRoomPrompt(

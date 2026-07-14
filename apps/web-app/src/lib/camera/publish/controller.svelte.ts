@@ -1,3 +1,17 @@
+/**
+ * PublishController
+ *
+ * Syncs local composition video + microphone tracks to LiveKit local
+ * publications. Handles re-publish when sources change and mute/unmute sync.
+ *
+ * Lifecycle:
+ *   const publish = new PublishController({ media, room, getCompositionTrack, onError });
+ *   publish.onRoomChanged(reason);
+ *   publish.onMediaChanged(reason);
+ *   await publish.queueSync();
+ *   publish.dispose();
+ */
+
 import { Track, type LocalTrackPublication } from 'livekit-client';
 
 import { getMediaErrorMessage } from '../shared/errors.ts';
@@ -13,7 +27,6 @@ export interface PublishControllerOptions {
   getCompositionTrack?: () => MediaStreamTrack | null;
 }
 
-// Publishes composition video + microphone tracks to LiveKit.
 export class PublishController {
   lastError = $state('');
   syncing = $state(false);

@@ -1,4 +1,16 @@
-// LiveKit room lifecycle + participant tiles.
+/**
+ * RoomController
+ *
+ * Owns LiveKit room connection lifecycle and participant tiles, including
+ * remote track stream wiring and local preview tile state.
+ *
+ * Lifecycle:
+ *   const room = new RoomController({ media, onInfo, onError, onRoomChanged });
+ *   await room.create(); // or room.join()
+ *   room.rebuildParticipantTiles();
+ *   await room.leave(true);
+ *   room.dispose();
+ */
 
 import {
   ConnectionQuality,

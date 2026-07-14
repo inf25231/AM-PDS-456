@@ -1,17 +1,10 @@
 export type WebcamVisibility = 'visible' | 'hidden';
 
-/**
- * Background fill. Either:
- *   - "none"  : transparent / no fill (default — webcam shows through)
- *   - "image" : an uploaded picture
- */
 export type BackgroundKind = 'none' | 'image';
 
 export interface BackgroundState {
   kind: BackgroundKind;
-  /** Object URL for the uploaded image (only meaningful when kind === "image"). */
   imageUrl: string | null;
-  /** Original filename for display in the UI. */
   imageName: string;
 }
 
@@ -24,32 +17,20 @@ export interface ModelState {
   url: string | null;
   name: string;
   source: 'none' | 'demo' | 'custom';
-  /** Size relative to the detected face width. */
   scale: number;
-  /** Horizontal offset, in fractions of face width. */
   offsetX: number;
-  /** Vertical offset, in fractions of face height. */
   offsetY: number;
-  /** Extra yaw offset in degrees for orientation tuning. */
   rotationY: number;
 }
 
 export interface CameraEffectsState {
-  /** Hide the raw webcam frame while keeping tracking + effects running. */
   webcamVisibility: WebcamVisibility;
-
-  /** Debug overlay showing tracked landmarks. */
   showLandmarksDebug: boolean;
-
   background: BackgroundState;
   model: ModelState;
 }
 
-// ----------------------------------------------------------------------
-// Defaults + clamps
-// ----------------------------------------------------------------------
-
-function clamp(value: number, min: number, max: number) {
+function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
@@ -88,15 +69,6 @@ export function normalizeEffectsState(state: CameraEffectsState): CameraEffectsS
   };
 }
 
-// ----------------------------------------------------------------------
-// Background helpers
-// ----------------------------------------------------------------------
-
-/**
- * Apply an uploaded image as the background. Revokes any previous object
- * URL to avoid leaks. Pass `file = null` to clear the image (background
- * resets to "none").
- */
 export function setBackgroundImage(previous: BackgroundState, file: File | null): BackgroundState {
   if (previous.imageUrl) {
     URL.revokeObjectURL(previous.imageUrl);
@@ -113,14 +85,6 @@ export function setBackgroundImage(previous: BackgroundState, file: File | null)
   };
 }
 
-// ----------------------------------------------------------------------
-// Model helpers
-// ----------------------------------------------------------------------
-
-/**
- * Apply an uploaded GLB/GLTF file as the model. Revokes any previous
- * object URL. Pass `file = null` to clear the model entirely.
- */
 export function setModelFile(previous: ModelState, file: File | null): ModelState {
   if (previous.source === 'custom' && previous.url) {
     URL.revokeObjectURL(previous.url);

@@ -292,7 +292,6 @@ export class ThreeMaskRenderer {
         return;
       }
 
-      const material = node.material;
       const apply = (mat: THREE.Material) => {
         const withOpacity = mat as THREE.Material & {
           opacity?: number;
@@ -304,16 +303,7 @@ export class ThreeMaskRenderer {
         withOpacity.needsUpdate = true;
       };
 
-      if (Array.isArray(material)) {
-        for (const item of material) {
-          apply(item);
-        }
-        return;
-      }
-
-      if (material) {
-        apply(material);
-      }
+      this.forEachMaterial(node.material, apply);
     });
   }
 
@@ -325,16 +315,24 @@ export class ThreeMaskRenderer {
 
       node.geometry?.dispose();
 
-      const material = node.material;
-      if (Array.isArray(material)) {
-        for (const item of material) {
-          item.dispose();
-        }
-        return;
-      }
-
-      material?.dispose();
+      this.forEachMaterial(node.material, (material) => material.dispose());
     });
+  }
+
+  private forEachMaterial(
+    material: THREE.Material | THREE.Material[] | undefined,
+    applyToMaterial: (material: THREE.Material) => void
+  ) {
+    if (Array.isArray(material)) {
+      for (const item of material) {
+        applyToMaterial(item);
+      }
+      return;
+    }
+
+    if (material) {
+      applyToMaterial(material);
+    }
   }
 
   private applyBlendshapes(result: FaceLandmarkerResult) {

@@ -1,30 +1,16 @@
-// src/lib/camera/effects/controller.svelte.ts
-
 /**
  * EffectsController
  *
- * Reactive (Svelte 5 runes) controller for local camera effects preview
- * and composition for publishing.
- *
- * Two parallel rendering paths:
- *   1. Preview canvases (background, 3D model, 2D effects) — overlaid
- *      on top of the local <video> for the user to see effects live.
- *   2. CompositionController — single offscreen canvas that combines the
- *      webcam, background, 3D model, and optional landmarks debug overlay
- *      into a MediaStreamTrack for publishing to LiveKit.
+ * Reactive controller for local camera effects preview and composition
+ * output used for publishing.
  *
  * Lifecycle:
- *   const effects = new EffectsController({ media, room, onError });
- *   effects.attachElements({ video, backgroundCanvas, effectsCanvas, effects3dCanvas });
+ *   const effects = new EffectsController({ getCameraEnabled, getCameraState, getIsRoomConnected, onError });
  *   effects.init();
+ *   effects.attachElements({ video, previewContainer });
  *   effects.syncAll();
- *
- *   // When entering a room:
- *   effects.startCompositionSession();
- *
- *   // When leaving a room:
- *   effects.stopCompositionSession();
- *
+ *   effects.startCompositionSession(); // when room connects
+ *   effects.stopCompositionSession();  // when room disconnects
  *   effects.dispose();
  */
 
@@ -44,17 +30,9 @@ import { getMediaErrorMessage } from '../shared/errors.ts';
 import { COMPOSITION_FPS, FACE_TRACKING_FPS } from '../shared/constants.ts';
 import { CompositionController } from './composition.svelte.ts';
 
-// ----------------------------------------------------------------------
-// Pure helper
-// ----------------------------------------------------------------------
-
 export function shouldTrackFace(state: CameraEffectsState): boolean {
   return state.model.enabled || state.showLandmarksDebug;
 }
-
-// ----------------------------------------------------------------------
-// Public types
-// ----------------------------------------------------------------------
 
 export interface EffectsControllerOptions {
   getCameraEnabled: () => boolean;
@@ -110,10 +88,7 @@ export class EffectsController {
     this.opts = opts;
   }
 
-  // ==================================================================
-  // Element attachment
-  // ==================================================================
-
+  // Attach the DOM nodes used for preview + composition.
   attachElements(elements: AttachedElements): void {
     if (this.disposed) return;
 
@@ -160,20 +135,15 @@ export class EffectsController {
     this.elements = null;
   }
 
-  // ==================================================================
-  // Boot / dispose
-  // ==================================================================
-
+  // Window-only setup for viewport-dependent fps/tracking.
   init(): void {
     if (this.disposed) return;
+    if (typeof window === 'undefined') return;
+    if (typeof window.matchMedia !== 'function') return;
 
-    if (typeof window !== 'undefined') {
-      if (typeof window.matchMedia === 'function') {
-        this.mediaQueryList = window.matchMedia(DEFAULT_MOBILE_QUERY);
-        this.isMobileViewport = this.mediaQueryList.matches;
-        this.mediaQueryList.addEventListener('change', this.mediaQueryListener);
-      }
-    }
+    this.mediaQueryList = window.matchMedia(DEFAULT_MOBILE_QUERY);
+    this.isMobileViewport = this.mediaQueryList.matches;
+    this.mediaQueryList.addEventListener('change', this.mediaQueryListener);
   }
 
   dispose(): void {
@@ -185,7 +155,6 @@ export class EffectsController {
       this.mediaQueryList = null;
     }
 
-    this.stopTracking();
     this.detachElements();
 
     if (this.state.background.imageUrl) {
@@ -215,21 +184,12 @@ export class EffectsController {
     this.syncCompositionFps();
   }
 
-  // ==================================================================
-  // Top-level sync
-  // ==================================================================
-
   syncAll(): void {
     if (this.disposed || !this.elements) return;
-
     normalizeEffectsState(this.state);
     this.syncTracking();
     void this.sync3dMaskModel();
   }
-
-  // ==================================================================
-  // Tracking
-  // ==================================================================
 
   syncTracking(): void {
     if (this.disposed || !this.elements) {
@@ -275,12 +235,6 @@ export class EffectsController {
     this.latestFaceResult = null;
   }
 
-  /**
-   * Syncs the active 3D model with the current state.
-   *
-   * @returns the number of unique blendshapes found in the freshly loaded
-   *   model, or 0 when nothing was (re)loaded / the model was cleared.
-   */
   async sync3dMaskModel(): Promise<number> {
     this.ensureRenderer();
     if (!this.modelRenderer) return 0;
@@ -298,10 +252,6 @@ export class EffectsController {
       return 0;
     }
   }
-
-  // ==================================================================
-  // Background
-  // ==================================================================
 
   clearBackground(): void {
     if (this.state.background.imageUrl) {
@@ -467,19 +417,15 @@ export class EffectsController {
     this.composition = null;
   }
 
-  /**
-   * Resolve the composition render/capture fps for the current state:
-   * lower while idle (outside a room, e.g. still setting up the camera),
-   * and mobile-throttled once connected, to save CPU/battery.
-   */
   private syncCompositionFps(): void {
     if (!this.composition) return;
 
-    const fps = !this.opts.getIsRoomConnected()
-      ? COMPOSITION_FPS.IDLE
-      : this.isMobileViewport
+    let fps: number = COMPOSITION_FPS.IDLE;
+    if (this.opts.getIsRoomConnected()) {
+      fps = this.isMobileViewport
         ? COMPOSITION_FPS.CONNECTED_MOBILE
         : COMPOSITION_FPS.CONNECTED_DESKTOP;
+    }
 
     this.composition.setTargetFps(fps);
   }
@@ -504,9 +450,7 @@ export class EffectsController {
       const dx = (width - dw) / 2;
       const dy = (height - dh) / 2;
 
-      ctx.save();
       ctx.drawImage(this.backgroundImage, dx, dy, dw, dh);
-      ctx.restore();
     }
   }
 
@@ -536,13 +480,8 @@ export class EffectsController {
   private ensureRenderer(): void {
     const canvas = this.modelCanvas;
     if (!canvas) return;
+    if (this.modelRenderer) return;
 
-    if (this.modelRenderer) {
-      return;
-    }
-
-    this.modelRenderer?.dispose();
-    this.modelRenderer = null;
     try {
       this.modelRenderer = new ThreeMaskRenderer(canvas);
     } catch (error) {
@@ -550,7 +489,6 @@ export class EffectsController {
     }
   }
 
-  /** Recreate the composition track if it died (e.g. after camera restart). */
   restartCompositionIfNeeded(): void {
     this.composition?.restartIfEnded();
   }

@@ -1,3 +1,16 @@
+/**
+ * MediaController
+ *
+ * Owns local camera/microphone streams, selected devices/quality, and
+ * reacts to browser device-change events.
+ *
+ * Lifecycle:
+ *   const media = new MediaController({ getVideoElement, onError, onMediaChanged });
+ *   media.init();
+ *   await media.startAll(); // or startCamera/startMicrophone separately
+ *   media.dispose();
+ */
+
 import {
   buildCameraConstraints,
   buildMediaConstraints,
@@ -43,7 +56,6 @@ export type MediaChangeReason =
   | 'audio-device-changed'
   | 'devices-refreshed';
 
-// Local camera/microphone state and lifecycle for the camera page.
 export class MediaController {
   cameraStream = $state<MediaStream | null>(null);
   microphoneStream = $state<MediaStream | null>(null);

@@ -12,9 +12,8 @@ const WASM_FILES_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.1
 let landmarkerPromise: Promise<FaceLandmarker> | null = null;
 
 export function createFaceLandmarker(): Promise<FaceLandmarker> {
-  return (
-    landmarkerPromise ??
-    (landmarkerPromise = (async () => {
+  if (!landmarkerPromise) {
+    landmarkerPromise = (async () => {
       const vision = await FilesetResolver.forVisionTasks(WASM_FILES_URL);
 
       return FaceLandmarker.createFromOptions(vision, {
@@ -30,18 +29,22 @@ export function createFaceLandmarker(): Promise<FaceLandmarker> {
         minTrackingConfidence: 0.6,
         minFacePresenceConfidence: 0.6
       });
-    })())
+    })();
+  }
+
+  return landmarkerPromise;
+}
+
+function hasVideoFrame(videoEl: HTMLVideoElement): boolean {
+  return (
+    videoEl.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+    videoEl.videoWidth > 0 &&
+    videoEl.videoHeight > 0
   );
 }
 
 export async function waitForVideoReady(videoEl: HTMLVideoElement): Promise<void> {
-  if (
-    videoEl.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-    videoEl.videoWidth > 0 &&
-    videoEl.videoHeight > 0
-  ) {
-    return;
-  }
+  if (hasVideoFrame(videoEl)) return;
 
   await new Promise<void>((resolve) => {
     videoEl.addEventListener('loadeddata', () => resolve(), { once: true });
@@ -74,11 +77,7 @@ export function startFaceTracking(
         return;
       }
 
-      if (
-        videoEl.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-        videoEl.currentTime !== lastVideoTime &&
-        now - lastInferTime >= minIntervalMs
-      ) {
+      if (hasVideoFrame(videoEl) && videoEl.currentTime !== lastVideoTime && now - lastInferTime >= minIntervalMs) {
         lastVideoTime = videoEl.currentTime;
         lastInferTime = now;
         onResults(landmarker.detectForVideo(videoEl, now));
