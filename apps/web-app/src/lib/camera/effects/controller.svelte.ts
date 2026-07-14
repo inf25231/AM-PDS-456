@@ -36,12 +36,12 @@ import {
   setModelFile,
   type CameraEffectsState,
   type WebcamVisibility
-} from '$lib/camera/effects/state.ts';
-import { drawLandmarksDebug } from '$lib/camera/effects/renderers/landmarks-debug-renderer.ts';
-import { ThreeMaskRenderer } from '$lib/camera/effects/renderers/three-mask-renderer.ts';
-import { startFaceTracking, type FaceLandmarkerResult } from '$lib/camera/effects/tracking.ts';
-import { getMediaErrorMessage } from '$lib/camera/shared/errors.ts';
-import { COMPOSITION_FPS, FACE_TRACKING_FPS } from '$lib/camera/shared/constants.ts';
+} from './state.ts';
+import { drawLandmarksDebug } from './renderers/landmarks-debug-renderer.ts';
+import { ThreeMaskRenderer } from './renderers/three-mask-renderer.ts';
+import { startFaceTracking, type FaceLandmarkerResult } from './tracking.ts';
+import { getMediaErrorMessage } from '../shared/errors.ts';
+import { COMPOSITION_FPS, FACE_TRACKING_FPS } from '../shared/constants.ts';
 import { CompositionController } from './composition.svelte.ts';
 
 // ----------------------------------------------------------------------

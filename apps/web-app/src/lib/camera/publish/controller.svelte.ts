@@ -24,9 +24,9 @@
 
 import { Track, type LocalTrackPublication } from 'livekit-client';
 
-import { getMediaErrorMessage } from '$lib/camera/shared/errors.ts';
-import type { MediaController } from '$lib/camera/media';
-import type { RoomController } from '$lib/camera/room';
+import { getMediaErrorMessage } from '../shared/errors.ts';
+import type { MediaController } from '../media/index.ts';
+import type { RoomController } from '../room/index.ts';
 
 // ----------------------------------------------------------------------
 // Public types

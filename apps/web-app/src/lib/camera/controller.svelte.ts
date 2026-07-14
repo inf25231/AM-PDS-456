@@ -1,12 +1,12 @@
-import { EffectsController } from '$lib/camera/effects';
-import { MediaController } from '$lib/camera/media';
-import { PublishController } from '$lib/camera/publish';
-import { RoomController } from '$lib/camera/room';
-import { BannerStore } from '$lib/camera/shared/banner-store.svelte.ts';
+import { EffectsController } from './effects/index.ts';
+import { MediaController } from './media/index.ts';
+import { PublishController } from './publish/index.ts';
+import { RoomController } from './room/index.ts';
+import { BannerStore } from './shared/banner-store.svelte.ts';
 
-import type { EffectsControllerOptions } from '$lib/camera/effects';
-import type { MediaChangeReason } from '$lib/camera/media';
-import type { RoomChangeReason } from '$lib/camera/room';
+import type { EffectsControllerOptions } from './effects/index.ts';
+import type { MediaChangeReason } from './media/index.ts';
+import type { RoomChangeReason } from './room/index.ts';
 
 export interface CameraControllerOptions {
   getVideoElement: () => HTMLVideoElement | null;
@@ -127,7 +127,7 @@ export class CameraController {
     });
     this.effects.syncAll();
 
-    if (import.meta.env.DEV) {
+    if ((import.meta as any).env?.DEV) {
       (window as any).debug = {
         media: this.media,
         room: this.room,

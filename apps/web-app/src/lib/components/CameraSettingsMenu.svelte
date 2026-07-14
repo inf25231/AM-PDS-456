@@ -13,12 +13,12 @@
     remain the respective sources of truth.
 -->
 <script lang="ts">
-  import type { DeviceOption } from '$lib/camera/media/core/devices.ts';
+  import type { DeviceOption } from '$lib/camera/media';
   import MediaPopover from '$lib/components/MediaPopover.svelte';
   import settingsIcon from '$lib/images/settings.svg';
   import closeIcon from '$lib/images/x-close.svg';
-  import type { CameraState, VideoQuality } from '$lib/camera/media/core/media.ts';
-  import type { ModelState } from '$lib/camera/effects/state.ts';
+  import type { CameraState, VideoQuality } from '$lib/camera/media';
+  import type { ModelState } from '$lib/camera/effects';
 
   type Props = {
     selectedQuality: VideoQuality;

@@ -37,6 +37,38 @@ export default tseslint.config(
     }
   },
   {
+    files: ['apps/web-app/src/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
+    ignores: [
+      'apps/web-app/src/lib/camera/media/**',
+      'apps/web-app/src/lib/camera/room/**',
+      'apps/web-app/src/lib/camera/effects/**',
+      'apps/web-app/src/lib/camera/publish/**'
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '$lib/camera/media/*',
+                '$lib/camera/media/**/*',
+                '$lib/camera/room/*',
+                '$lib/camera/room/**/*',
+                '$lib/camera/effects/*',
+                '$lib/camera/effects/**/*',
+                '$lib/camera/publish/*',
+                '$lib/camera/publish/**/*'
+              ],
+              message:
+                'Import camera domains only through $lib/camera/{media|room|effects|publish} public index.ts.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     files: ['apps/web-app/src/lib/camera/shared/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
     rules: {
       'no-restricted-imports': [
@@ -58,48 +90,20 @@ export default tseslint.config(
     }
   },
   {
-    files: ['apps/web-app/src/lib/camera/media/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
+    files: [
+      'apps/web-app/src/lib/camera/media/**/*.{ts,js,svelte,svelte.ts,svelte.js}',
+      'apps/web-app/src/lib/camera/room/**/*.{ts,js,svelte,svelte.ts,svelte.js}',
+      'apps/web-app/src/lib/camera/effects/**/*.{ts,js,svelte,svelte.ts,svelte.js}'
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              group: ['$lib/camera/room/**', '$lib/camera/effects/**', '$lib/camera/publish/**'],
-              message: 'media must not depend on room/effects/publish.'
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
-    files: ['apps/web-app/src/lib/camera/room/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['$lib/camera/effects/**', '$lib/camera/publish/**', '$lib/camera/media/core/**'],
+              group: ['$lib/camera/media/**', '$lib/camera/room/**', '$lib/camera/effects/**', '$lib/camera/publish/**'],
               message:
-                'room must not depend on effects/publish and should not import media internals.'
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
-    files: ['apps/web-app/src/lib/camera/effects/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['$lib/camera/media/**', '$lib/camera/room/**', '$lib/camera/publish/**'],
-              message: 'effects must stay independent from media/room/publish domains.'
+                'media/room/effects are independent domains. Do not import camera domains via alias from inside these domains.'
             }
           ]
         }

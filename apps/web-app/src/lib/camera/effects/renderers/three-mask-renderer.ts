@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import type { CameraEffectsState } from '$lib/camera/effects/state.ts';
-import { FACE_OVAL_INDICES } from '$lib/camera/effects/geometry/face-region-indices.ts';
+import type { CameraEffectsState } from '../state.ts';
+import { FACE_OVAL_INDICES } from '../geometry/face-region-indices.ts';
 import {
   computeCoverTransform,
   averagePoint,
   getBBox
-} from '$lib/camera/effects/geometry/face-geometry.ts';
-import type { FaceLandmarkerResult } from '$lib/camera/effects/tracking.ts';
+} from '../geometry/face-geometry.ts';
+import type { FaceLandmarkerResult } from '../tracking.ts';
 
 type Landmark = { x: number; y: number; z: number };
 

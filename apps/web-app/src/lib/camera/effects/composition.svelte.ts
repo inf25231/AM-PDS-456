@@ -1,5 +1,5 @@
-import type { CameraEffectsState } from '$lib/camera/effects/state.ts';
-import type { FaceLandmarkerResult } from '$lib/camera/effects/tracking.ts';
+import type { CameraEffectsState } from './state.ts';
+import type { FaceLandmarkerResult } from './tracking.ts';
 
 export interface CompositionControllerOptions {
   getVideoElement: () => HTMLVideoElement | null;
