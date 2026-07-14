@@ -686,42 +686,6 @@ export class MediaController {
   }
 
   // ==================================================================
-  // Pre-call readiness
-  // ==================================================================
-
-  /**
-   * Ensure both streams exist and their tracks are live. Used right before
-   * joining a room so we never publish an ended track.
-   */
-  async ensureReadyForCall(): Promise<void> {
-    if (this.#disposed) return;
-
-    if (!this.cameraStream && !this.microphoneStream) {
-      await this.startAll();
-      return;
-    }
-    if (!this.cameraStream) await this.startCamera();
-    if (!this.microphoneStream) await this.startMicrophone();
-
-    const videoTrack = this.cameraStream?.getVideoTracks()[0] ?? null;
-    const audioTrack = this.microphoneStream?.getAudioTracks()[0] ?? null;
-
-    const shouldRestartCamera = Boolean(
-      this.cameraStream && (!videoTrack || videoTrack.readyState === 'ended')
-    );
-    const shouldRestartMicrophone = Boolean(
-      this.microphoneStream && (!audioTrack || audioTrack.readyState === 'ended')
-    );
-
-    if (shouldRestartCamera || shouldRestartMicrophone) {
-      await this.restartActiveMedia({
-        restartCamera: shouldRestartCamera,
-        restartMicrophone: shouldRestartMicrophone
-      });
-    }
-  }
-
-  // ==================================================================
   // Internals
   // ==================================================================
 
