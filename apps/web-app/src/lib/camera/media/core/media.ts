@@ -1,5 +1,6 @@
 export type CameraState = 'idle' | 'loading' | 'ready' | 'error';
 export type VideoQuality = '360p' | '480p' | '720p' | '1080p';
+type TrackKind = 'video' | 'audio';
 
 const VIDEO_QUALITY_CONSTRAINTS: Record<VideoQuality, MediaTrackConstraints> = {
   '360p': {
@@ -32,7 +33,7 @@ export function getVideoConstraintsByQuality(quality: VideoQuality): MediaTrackC
   return VIDEO_QUALITY_CONSTRAINTS[quality];
 }
 
-export async function startCamera(
+export async function startCameraStream(
   video: HTMLVideoElement,
   constraints: MediaStreamConstraints = {
     video: {
@@ -51,7 +52,7 @@ export async function startCamera(
   return stream;
 }
 
-export async function startMicrophone(
+export async function startMicrophoneStream(
   constraints: MediaStreamConstraints = {
     video: false,
     audio: true
@@ -64,7 +65,7 @@ export async function startMicrophone(
   return navigator.mediaDevices.getUserMedia(constraints);
 }
 
-export async function startCameraAndMicrophone(
+export async function startCameraAndMicrophoneStreams(
   constraints: MediaStreamConstraints = {
     video: {
       facingMode: 'user'
@@ -91,7 +92,56 @@ export async function startCameraAndMicrophone(
   };
 }
 
-export function stopMediaStream(stream: MediaStream | null) {
+export function stopStream(stream: MediaStream | null) {
   if (!stream) return;
   stream.getTracks().forEach((track) => track.stop());
+}
+
+export async function attachStreamToVideo(
+  videoElement: HTMLVideoElement,
+  stream: MediaStream
+): Promise<void> {
+  videoElement.srcObject = stream;
+  await videoElement.play();
+}
+
+export function stopCameraStream(
+  videoElement: HTMLVideoElement | null,
+  cameraStream: MediaStream | null
+): void {
+  const elementStream = videoElement?.srcObject;
+  const hasMediaStreamApi = typeof MediaStream !== 'undefined';
+
+  stopStream(cameraStream);
+  if (hasMediaStreamApi && elementStream instanceof MediaStream) {
+    stopStream(elementStream);
+  }
+
+  if (videoElement) {
+    videoElement.pause();
+    videoElement.srcObject = null;
+    videoElement.load();
+  }
+}
+
+export function stopMicrophoneStream(microphoneStream: MediaStream | null): void {
+  if (microphoneStream) {
+    microphoneStream.getAudioTracks().forEach((track) => {
+      track.stop();
+      microphoneStream.removeTrack(track);
+    });
+  }
+
+  stopStream(microphoneStream);
+}
+
+export function setStreamTrackEnabled(
+  stream: MediaStream | null,
+  kind: TrackKind,
+  enabled: boolean
+): boolean {
+  const track = kind === 'video' ? stream?.getVideoTracks()[0] : stream?.getAudioTracks()[0];
+  if (!track) return false;
+  track.enabled = enabled;
+  return true;
 }

@@ -139,10 +139,10 @@ export class RoomController {
 
     if (restartMedia) {
       try {
-        await this.media.restartActiveMedia({
-          restartCamera: Boolean(this.media.cameraStream),
-          restartMicrophone: Boolean(this.media.microphoneStream)
-        });
+        await this.media.restartActiveMedia(
+          Boolean(this.media.cameraStream),
+          Boolean(this.media.microphoneStream)
+        );
       } catch {
         // Keep current streams if restart fails.
       }

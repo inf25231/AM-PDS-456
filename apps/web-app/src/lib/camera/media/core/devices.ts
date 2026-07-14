@@ -1,11 +1,3 @@
-/**
- * Lightweight device helpers for the camera route.
- *
- * The route uses this module to:
- * - build select options for camera and microphone dropdowns
- * - read device ids from active tracks
- * - keep persisted device ids valid when hardware changes
- */
 export type DeviceOption = {
   value: string;
   label: string;
@@ -20,11 +12,6 @@ function mapDeviceOptions(devices: MediaDeviceInfo[], labelPrefix: string): Devi
   }));
 }
 
-/**
- * Enumerates available media devices and converts them into select options.
- *
- * Labels may still be generic until the user has granted media permissions.
- */
 export async function enumerateMediaDeviceOptions() {
   if (!navigator.mediaDevices?.enumerateDevices) {
     return {
@@ -46,29 +33,22 @@ export async function enumerateMediaDeviceOptions() {
   };
 }
 
-/**
- * Reads the active device id from the current stream track settings.
- */
 export function getStreamTrackDeviceId(stream: MediaStream | null, kind: TrackKind) {
   const track = kind === 'video' ? stream?.getVideoTracks()?.[0] : stream?.getAudioTracks()?.[0];
   const deviceId = track?.getSettings().deviceId;
   return typeof deviceId === 'string' ? deviceId : '';
 }
 
-/**
- * Keeps a persisted device id only when it still exists in the current option list.
- *
- * If the persisted id disappeared, the function falls back to the currently active
- * track device id when possible. This avoids broken selections after device changes.
- */
 export function normalizeSelectedDeviceId(
   selectedDeviceId: string,
   options: DeviceOption[],
   fallbackDeviceId = ''
 ) {
+  // keep selected if still present
   if (options.some((option) => option.value === selectedDeviceId)) {
     return selectedDeviceId;
   }
 
+  // otherwise try active device, else clear selection
   return options.some((option) => option.value === fallbackDeviceId) ? fallbackDeviceId : '';
 }
