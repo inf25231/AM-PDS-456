@@ -1,19 +1,9 @@
 <!--
-    Main camera page.
-
-    This file is the orchestration layer for the full camera page. It wires
-    together four controllers and renders the visual stage. The controllers
-    do the work:
-
-      - MediaController:   camera + microphone streams, devices, quality.
-      - RoomController:    LiveKit room lifecycle and participant tiles.
-      - EffectsController: face tracking, overlay rendering, 3D mask,
-                           uploads, and the composition pipeline.
-      - PublishController: track publishing — bridges MediaController +
-                           EffectsController.composition to the room.
-
-    The heavy browser helpers live in src/lib/camera/*. This file decides
-    when the controllers run and how their state affects the UI.
+  Main camera page.
+  This file wires controllers to UI:
+  media -> room -> effects -> publish.
+  Business logic stays inside controllers; this route coordinates lifecycle
+  and binds controller state/actions to Svelte components.
 -->
 
 <script lang="ts">
@@ -36,6 +26,7 @@
   import modelIcon from '$lib/images/model.svg';
   import eyeOpenIcon from '$lib/images/eye-open.svg';
   import eyeClosedIcon from '$lib/images/eye-close.svg';
+  import loadingIcon from '$lib/images/loading.svg';
 
   import EffectsMenu from '$lib/components/EffectsMenu.svelte';
   import MediaControls from '$lib/components/MediaControls.svelte';
@@ -52,8 +43,24 @@
   let roomPrompt = $state<{ kind: 'room' | 'user'; initialValue: string } | null>(null);
   let resolveRoomPrompt: ((value: string | null) => void) | null = null;
 
-  // --- Stores / inline helpers ---
+  // --- Stores / helpers ---
   const banner = new BannerStore();
+  const showInfo = (message: string) => banner.showInfo(message);
+  const showError = (message: string) => banner.showError(message);
+
+  function shouldRestartComposition(reason: string): boolean {
+    return reason === 'camera-started' || reason === 'video-device-changed';
+  }
+
+  function shouldSyncTracking(reason: string): boolean {
+    return (
+      reason === 'camera-started' ||
+      reason === 'camera-stopped' ||
+      reason === 'camera-toggled' ||
+      reason === 'video-device-changed' ||
+      reason === 'quality-changed'
+    );
+  }
 
   // RoomController awaits these values, while the Svelte prompt remains
   // non-blocking so the mobile camera render loop keeps running.
@@ -74,43 +81,20 @@
     resolve?.(value);
   }
 
-  // ------------------------------------------------------------------
-  // Controllers
-  // ------------------------------------------------------------------
-  //
-  // Construction order matters because of cross-references:
-  //
-  //   media  → no deps
-  //   room   → media
-  //   effects → media, room (also owns composition)
-  //   publish → media, room, effects.composition
-  //
-  // The onMediaChanged / onRoomChanged callbacks reach back into `publish`
-  // and `effects` which are declared after — `publish` and `effects` are
-  // captured by closure and are non-null by the time any callback fires.
-
-  // ------------------------------------------------------------------
+  // Controllers (order matters: media -> room -> effects -> publish).
   let publish: PublishController | undefined;
 
   const media = new MediaController({
     getVideoElement: () => videoEl,
-    onError: (message) => {
-      banner.showError(message);
-    },
+    onError: showError,
     onMediaChanged: (reason) => {
       publish?.onMediaChanged(reason);
 
-      if ((reason === 'camera-started' || reason === 'video-device-changed') && room?.isConnected) {
+      if (shouldRestartComposition(reason) && room.isConnected) {
         effects?.restartCompositionIfNeeded();
       }
 
-      if (
-        reason === 'camera-started' ||
-        reason === 'camera-stopped' ||
-        reason === 'camera-toggled' ||
-        reason === 'video-device-changed' ||
-        reason === 'quality-changed'
-      ) {
+      if (shouldSyncTracking(reason)) {
         effects?.syncTracking();
       }
     }
@@ -120,12 +104,8 @@
     media,
     promptRoomName: (previous) => requestRoomPrompt('room', previous),
     promptUserName: (previous) => requestRoomPrompt('user', previous),
-    onInfo: (message) => {
-      banner.showInfo(message);
-    },
-    onError: (message) => {
-      banner.showError(message);
-    },
+    onInfo: showInfo,
+    onError: showError,
     onRoomChanged: (reason) => {
       publish?.onRoomChanged(reason);
 
@@ -142,12 +122,8 @@
   const effects = new EffectsController({
     media,
     room,
-    onInfo: (message) => {
-      banner.showInfo(message);
-    },
-    onError: (message) => {
-      banner.showError(message);
-    },
+    onInfo: showInfo,
+    onError: showError,
     onCompositionReady: () => {
       // Track exists — if we're already in a room, publish it.
       publish?.queueSync();
@@ -158,10 +134,12 @@
     media,
     room,
     getCompositionTrack: () => effects.compositionTrack,
-    onError: (message) => {
-      banner.showError(message);
-    }
+    onError: showError
   });
+
+  const hasErrorBanner = $derived(
+    media.cameraState === 'error' || media.microphoneState === 'error' || Boolean(banner.error)
+  );
 
   // ------------------------------------------------------------------
   // Reactive glue
@@ -206,17 +184,19 @@
 
   onMount(async () => {
     media.init();
+    effects.init();
     await media.startAll();
 
-    if (!videoEl || !previewContainerEl) {
-      banner.showError('Camera stage is not ready yet. Please refresh the page.');
+    const video = videoEl;
+    const previewContainer = previewContainerEl;
+    if (!video || !previewContainer) {
+      showError('Camera stage is not ready. Please refresh the page.');
       return;
     }
 
-    effects.init();
     effects.attachElements({
-      video: videoEl,
-      previewContainer: previewContainerEl
+      video,
+      previewContainer
     });
     effects.syncAll();
 
@@ -240,7 +220,7 @@
   <title>Camera</title>
 </svelte:head>
 
-<div class:camera-view={true} class:in-room={room.connectionState === 'connected'}>
+<div class="camera-view" class:in-room={room.connectionState === 'connected'}>
   {#if roomPrompt}
     <RoomPrompt
       title={roomPrompt.kind === 'room' ? 'Choose a room' : 'Choose your name'}
@@ -263,7 +243,7 @@
 
   {#if room.connectionState === 'connecting'}
     <div class="connection-status" role="status" aria-live="polite">
-      <span class="connection-spinner" aria-hidden="true"></span>
+      <img class="connection-spinner" src={loadingIcon} alt="Loading indicator" />
       {room.connectionStatus || 'Connecting…'}
     </div>
   {/if}
@@ -297,7 +277,7 @@
   />
 
   <div class="banners">
-    {#if media.cameraState === 'error' || media.microphoneState === 'error' || banner.error}
+    {#if hasErrorBanner}
       <Banner message={banner.error || media.errorMessage} tone="error" />
     {/if}
 
@@ -414,18 +394,11 @@
   }
 
   .connection-spinner {
-    width: 0.85rem;
-    height: 0.85rem;
-    border: 2px solid rgb(255 255 255 / 30%);
-    border-top-color: var(--text-primary);
-    border-radius: 50%;
-    animation: spin 800ms linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    width: 1rem;
+    height: 1rem;
+    color: var(--text-primary);
+    flex: 0 0 auto;
+    filter: invert(1);
   }
 
   @media (max-width: 640px) {
