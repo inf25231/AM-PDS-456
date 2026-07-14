@@ -23,6 +23,17 @@ import type { EffectsControllerOptions } from './effects/index.ts';
 import type { MediaChangeReason } from './media/index.ts';
 import type { RoomChangeReason } from './room/index.ts';
 
+declare global {
+  interface Window {
+    debug?: {
+      media: MediaController;
+      room: RoomController;
+      effects: EffectsController;
+      publish: PublishController;
+    };
+  }
+}
+
 export interface CameraControllerOptions {
   getVideoElement: () => HTMLVideoElement | null;
   getPreviewContainer: () => HTMLDivElement | null;
@@ -142,8 +153,8 @@ export class CameraController {
     });
     this.effects.syncAll();
 
-    if ((import.meta as any).env?.DEV) {
-      (window as any).debug = {
+    if (import.meta.env.DEV) {
+      window.debug = {
         media: this.media,
         room: this.room,
         effects: this.effects,

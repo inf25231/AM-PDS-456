@@ -17,30 +17,30 @@ import {
 import { setStreamTrackEnabled, stopStream } from '../src/lib/camera/media/core/media.ts';
 
 class MemoryStorage implements Storage {
-  #data = new Map<string, string>();
+  private data = new Map<string, string>();
 
   get length() {
-    return this.#data.size;
+    return this.data.size;
   }
 
   clear(): void {
-    this.#data.clear();
+    this.data.clear();
   }
 
   getItem(key: string): string | null {
-    return this.#data.get(key) ?? null;
+    return this.data.get(key) ?? null;
   }
 
   key(index: number): string | null {
-    return Array.from(this.#data.keys())[index] ?? null;
+    return Array.from(this.data.keys())[index] ?? null;
   }
 
   removeItem(key: string): void {
-    this.#data.delete(key);
+    this.data.delete(key);
   }
 
   setItem(key: string, value: string): void {
-    this.#data.set(key, value);
+    this.data.set(key, value);
   }
 }
 

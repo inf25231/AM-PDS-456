@@ -71,20 +71,20 @@ export class MediaController {
   isApplyingQuality = $state(false);
   errorMessage = $state('');
 
-  readonly #opts: MediaControllerOptions;
-  #disposed = false;
-  #devicechangeHandler: (() => void) | null = null;
+  private readonly opts: MediaControllerOptions;
+  private disposed = false;
+  private devicechangeHandler: (() => void) | null = null;
 
   constructor(opts: MediaControllerOptions) {
-    this.#opts = opts;
+    this.opts = opts;
   }
 
   init(): void {
-    if (this.#disposed) return;
+    if (this.disposed) return;
 
     // Restore saved camera settings if storage is available.
     try {
-      const storage = this.#getStorage();
+      const storage = this.getStorage();
       if (storage) {
         const saved = readCameraPreferences(storage);
         this.selectedQuality = saved.selectedQuality;
@@ -96,41 +96,41 @@ export class MediaController {
     }
 
     if (typeof navigator !== 'undefined' && navigator.mediaDevices?.addEventListener) {
-      this.#devicechangeHandler = () => {
+      this.devicechangeHandler = () => {
         void this.refreshAvailableDevices('devices-refreshed');
       };
-      navigator.mediaDevices.addEventListener('devicechange', this.#devicechangeHandler);
+      navigator.mediaDevices.addEventListener('devicechange', this.devicechangeHandler);
     }
   }
 
   dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
+    if (this.disposed) return;
+    this.disposed = true;
 
     if (
-      this.#devicechangeHandler &&
+      this.devicechangeHandler &&
       typeof navigator !== 'undefined' &&
       navigator.mediaDevices?.removeEventListener
     ) {
-      navigator.mediaDevices.removeEventListener('devicechange', this.#devicechangeHandler);
+      navigator.mediaDevices.removeEventListener('devicechange', this.devicechangeHandler);
     }
-    this.#devicechangeHandler = null;
+    this.devicechangeHandler = null;
 
     this.stopCamera();
     this.stopMicrophone();
   }
 
   async startAll(): Promise<void> {
-    if (this.#disposed) return;
+    if (this.disposed) return;
 
-    this.#clearError();
+    this.clearError();
     this.cameraState = 'loading';
     this.microphoneState = 'loading';
 
     try {
-      const videoElement = this.#requireVideoElement();
+      const videoElement = this.requireVideoElement();
       const streams = await startCameraAndMicrophoneStreams(
-        buildMediaConstraints(this.#preferences())
+        buildMediaConstraints(this.preferences())
       );
       await attachStreamToVideo(videoElement, streams.cameraStream);
 
@@ -142,42 +142,42 @@ export class MediaController {
       this.microphoneState = 'ready';
 
       await this.refreshAvailableDevices('devices-refreshed');
-      this.#opts.onMediaChanged?.('camera-started');
-      this.#opts.onMediaChanged?.('microphone-started');
+      this.opts.onMediaChanged?.('camera-started');
+      this.opts.onMediaChanged?.('microphone-started');
     } catch (error) {
       this.cameraState = 'error';
       this.microphoneState = 'error';
-      this.#setError(getMediaErrorMessage('media', error));
+      this.setError(getMediaErrorMessage('media', error));
     }
   }
 
   async startCamera(): Promise<void> {
-    if (this.#disposed) return;
+    if (this.disposed) return;
 
-    this.#clearError();
+    this.clearError();
     this.cameraState = 'loading';
 
     try {
-      const videoElement = this.#requireVideoElement();
+      const videoElement = this.requireVideoElement();
       this.cameraStream = await startCameraStream(
         videoElement,
-        buildCameraConstraints(this.#preferences())
+        buildCameraConstraints(this.preferences())
       );
       this.cameraEnabled = true;
       this.cameraState = 'ready';
 
       await this.refreshAvailableDevices('devices-refreshed');
-      this.#opts.onMediaChanged?.('camera-started');
+      this.opts.onMediaChanged?.('camera-started');
     } catch (error) {
       this.cameraState = 'error';
-      this.#setError(getMediaErrorMessage('camera', error));
+      this.setError(getMediaErrorMessage('camera', error));
     }
   }
 
   async startMicrophone(): Promise<void> {
-    if (this.#disposed) return;
+    if (this.disposed) return;
 
-    this.#clearError();
+    this.clearError();
     this.microphoneState = 'loading';
 
     try {
@@ -188,19 +188,19 @@ export class MediaController {
       this.microphoneState = 'ready';
 
       await this.refreshAvailableDevices('devices-refreshed');
-      this.#opts.onMediaChanged?.('microphone-started');
+      this.opts.onMediaChanged?.('microphone-started');
     } catch (error) {
       this.microphoneState = 'error';
-      this.#setError(getMediaErrorMessage('microphone', error));
+      this.setError(getMediaErrorMessage('microphone', error));
     }
   }
 
   stopCamera(): void {
-    stopCameraStream(this.#opts.getVideoElement(), this.cameraStream);
+    stopCameraStream(this.opts.getVideoElement(), this.cameraStream);
     this.cameraStream = null;
     this.cameraEnabled = false;
     this.cameraState = 'idle';
-    this.#opts.onMediaChanged?.('camera-stopped');
+    this.opts.onMediaChanged?.('camera-stopped');
   }
 
   stopMicrophone(): void {
@@ -208,7 +208,7 @@ export class MediaController {
     this.microphoneStream = null;
     this.microphoneEnabled = false;
     this.microphoneState = 'idle';
-    this.#opts.onMediaChanged?.('microphone-stopped');
+    this.opts.onMediaChanged?.('microphone-stopped');
   }
 
   async toggleCamera(): Promise<void> {
@@ -219,12 +219,12 @@ export class MediaController {
       this.cameraEnabled = !this.cameraEnabled;
       if (this.cameraEnabled) {
         // Resume preview playback after re-enabling the camera track.
-        void this.#opts
+        void this.opts
           .getVideoElement()
           ?.play()
           .catch(() => {});
       }
-      this.#opts.onMediaChanged?.('camera-toggled');
+      this.opts.onMediaChanged?.('camera-toggled');
       return;
     }
 
@@ -237,7 +237,7 @@ export class MediaController {
       setStreamTrackEnabled(this.microphoneStream, 'audio', !this.microphoneEnabled)
     ) {
       this.microphoneEnabled = !this.microphoneEnabled;
-      this.#opts.onMediaChanged?.('microphone-toggled');
+      this.opts.onMediaChanged?.('microphone-toggled');
       return;
     }
 
@@ -246,14 +246,14 @@ export class MediaController {
 
   async setQuality(quality: VideoQuality): Promise<void> {
     this.selectedQuality = quality;
-    this.#savePreferences();
+    this.savePreferences();
     await this.applyVideoPreferences();
-    this.#opts.onMediaChanged?.('quality-changed');
+    this.opts.onMediaChanged?.('quality-changed');
   }
 
   async setVideoDevice(deviceId: string): Promise<void> {
     this.selectedVideoDeviceId = deviceId;
-    this.#savePreferences();
+    this.savePreferences();
 
     if (!this.cameraStream) {
       await this.refreshAvailableDevices('video-device-changed');
@@ -268,17 +268,17 @@ export class MediaController {
       await this.restartActiveMedia(true, hasMicrophone);
       this.cameraState = 'ready';
       if (hasMicrophone) this.microphoneState = 'ready';
-      this.#opts.onMediaChanged?.('video-device-changed');
+      this.opts.onMediaChanged?.('video-device-changed');
     } catch (error) {
       this.cameraState = 'error';
       if (hasMicrophone) this.microphoneState = 'error';
-      this.#setError(getMediaErrorMessage(hasMicrophone ? 'media' : 'camera', error));
+      this.setError(getMediaErrorMessage(hasMicrophone ? 'media' : 'camera', error));
     }
   }
 
   async setAudioDevice(deviceId: string): Promise<void> {
     this.selectedAudioDeviceId = deviceId;
-    this.#savePreferences();
+    this.savePreferences();
 
     if (!this.microphoneStream) {
       await this.refreshAvailableDevices('audio-device-changed');
@@ -293,16 +293,16 @@ export class MediaController {
       await this.restartActiveMedia(hasCamera, true);
       this.microphoneState = 'ready';
       if (hasCamera) this.cameraState = 'ready';
-      this.#opts.onMediaChanged?.('audio-device-changed');
+      this.opts.onMediaChanged?.('audio-device-changed');
     } catch (error) {
       this.microphoneState = 'error';
       if (hasCamera) this.cameraState = 'error';
-      this.#setError(getMediaErrorMessage(hasCamera ? 'media' : 'microphone', error));
+      this.setError(getMediaErrorMessage(hasCamera ? 'media' : 'microphone', error));
     }
   }
 
   async refreshAvailableDevices(reason: MediaChangeReason = 'devices-refreshed'): Promise<void> {
-    if (this.#disposed) return;
+    if (this.disposed) return;
 
     const { videoInputs, audioInputs } = await enumerateMediaDeviceOptions();
     this.availableVideoDevices = videoInputs;
@@ -328,18 +328,18 @@ export class MediaController {
     ) {
       this.selectedVideoDeviceId = nextVideoDeviceId;
       this.selectedAudioDeviceId = nextAudioDeviceId;
-      this.#savePreferences();
+      this.savePreferences();
     }
 
-    this.#opts.onMediaChanged?.(reason);
+    this.opts.onMediaChanged?.(reason);
   }
 
   async restartActiveMedia(restartCamera: boolean, restartMicrophone: boolean): Promise<void> {
-    if (this.#disposed) return;
+    if (this.disposed) return;
 
     const shouldEnableCamera = this.cameraEnabled;
     const shouldEnableMicrophone = this.microphoneEnabled;
-    const videoElement = this.#requireVideoElement();
+    const videoElement = this.requireVideoElement();
 
     if (restartCamera) {
       stopCameraStream(videoElement, this.cameraStream);
@@ -355,12 +355,12 @@ export class MediaController {
     if (restartCamera && restartMicrophone) {
       // One getUserMedia call for both tracks.
       const streams = await startCameraAndMicrophoneStreams(
-        buildMediaConstraints(this.#preferences())
+        buildMediaConstraints(this.preferences())
       );
       await attachStreamToVideo(videoElement, streams.cameraStream);
       this.cameraStream = streams.cameraStream;
       this.microphoneStream = streams.microphoneStream;
-      this.#restoreTrackEnabledFlags(shouldEnableCamera, shouldEnableMicrophone);
+      this.restoreTrackEnabledFlags(shouldEnableCamera, shouldEnableMicrophone);
       await this.refreshAvailableDevices();
       return;
     }
@@ -368,29 +368,29 @@ export class MediaController {
     if (restartCamera) {
       this.cameraStream = await startCameraStream(
         videoElement,
-        buildCameraConstraints(this.#preferences())
+        buildCameraConstraints(this.preferences())
       );
-      this.#restoreTrackEnabledFlags(shouldEnableCamera, this.microphoneEnabled);
+      this.restoreTrackEnabledFlags(shouldEnableCamera, this.microphoneEnabled);
     }
 
     if (restartMicrophone) {
       this.microphoneStream = await startMicrophoneStream(
         buildMicrophoneConstraints(this.selectedAudioDeviceId)
       );
-      this.#restoreTrackEnabledFlags(this.cameraEnabled, shouldEnableMicrophone);
+      this.restoreTrackEnabledFlags(this.cameraEnabled, shouldEnableMicrophone);
     }
 
     await this.refreshAvailableDevices();
   }
 
   async applyVideoPreferences(): Promise<void> {
-    if (this.#disposed) return;
+    if (this.disposed) return;
     if (!this.cameraStream) return;
 
     // Simpler behavior: quality change always restarts active streams.
     const hasMicrophone = Boolean(this.microphoneStream);
     this.isApplyingQuality = true;
-    this.#clearError();
+    this.clearError();
     this.cameraState = 'loading';
     if (hasMicrophone) this.microphoneState = 'loading';
 
@@ -408,13 +408,13 @@ export class MediaController {
         this.microphoneEnabled = false;
         this.microphoneState = 'error';
       }
-      this.#setError(getMediaErrorMessage(hasMicrophone ? 'media' : 'camera', error));
+      this.setError(getMediaErrorMessage(hasMicrophone ? 'media' : 'camera', error));
     } finally {
       this.isApplyingQuality = false;
     }
   }
 
-  #preferences() {
+  private preferences() {
     return {
       selectedQuality: this.selectedQuality,
       selectedVideoDeviceId: this.selectedVideoDeviceId,
@@ -422,17 +422,17 @@ export class MediaController {
     };
   }
 
-  #savePreferences(): void {
-    const storage = this.#getStorage();
+  private savePreferences(): void {
+    const storage = this.getStorage();
     if (!storage) return;
     try {
-      persistCameraPreferences(storage, this.#preferences());
+      persistCameraPreferences(storage, this.preferences());
     } catch {
       // ignore storage errors
     }
   }
 
-  #restoreTrackEnabledFlags(cameraEnabled: boolean, microphoneEnabled: boolean): void {
+  private restoreTrackEnabledFlags(cameraEnabled: boolean, microphoneEnabled: boolean): void {
     if (this.cameraStream) {
       setStreamTrackEnabled(this.cameraStream, 'video', cameraEnabled);
       this.cameraEnabled = cameraEnabled;
@@ -443,17 +443,17 @@ export class MediaController {
     }
   }
 
-  #requireVideoElement(): HTMLVideoElement {
-    const element = this.#opts.getVideoElement();
+  private requireVideoElement(): HTMLVideoElement {
+    const element = this.opts.getVideoElement();
     if (!element) {
       throw new Error('MediaController: <video> element is not mounted yet.');
     }
     return element;
   }
 
-  #getStorage(): Storage | null {
+  private getStorage(): Storage | null {
     try {
-      if (this.#opts.storage) return this.#opts.storage();
+      if (this.opts.storage) return this.opts.storage();
       if (typeof localStorage !== 'undefined') return localStorage;
     } catch {
       // ignore storage errors
@@ -461,12 +461,12 @@ export class MediaController {
     return null;
   }
 
-  #setError(message: string): void {
+  private setError(message: string): void {
     this.errorMessage = message;
-    this.#opts.onError?.(message);
+    this.opts.onError?.(message);
   }
 
-  #clearError(): void {
+  private clearError(): void {
     if (this.errorMessage !== '') this.errorMessage = '';
   }
 }
