@@ -37,6 +37,101 @@ export default tseslint.config(
     }
   },
   {
+    files: ['apps/web-app/src/lib/camera/shared/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '$lib/camera/media/**',
+                '$lib/camera/room/**',
+                '$lib/camera/effects/**',
+                '$lib/camera/publish/**'
+              ],
+              message: 'shared must stay domain-agnostic and cannot import camera domains.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ['apps/web-app/src/lib/camera/media/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['$lib/camera/room/**', '$lib/camera/effects/**', '$lib/camera/publish/**'],
+              message: 'media must not depend on room/effects/publish.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ['apps/web-app/src/lib/camera/room/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['$lib/camera/effects/**', '$lib/camera/publish/**', '$lib/camera/media/core/**'],
+              message:
+                'room must not depend on effects/publish and should not import media internals.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ['apps/web-app/src/lib/camera/effects/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['$lib/camera/publish/**', '$lib/camera/media/core/**', '$lib/camera/room/core/**'],
+              message:
+                'effects must not depend on publish or other domains internals (core).'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ['apps/web-app/src/lib/camera/publish/**/*.{ts,js,svelte,svelte.ts,svelte.js}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '$lib/camera/media/core/**',
+                '$lib/camera/room/core/**',
+                '$lib/camera/room/api/**',
+                '$lib/camera/effects/geometry/**',
+                '$lib/camera/effects/renderers/**',
+                '$lib/camera/effects/tracking/**'
+              ],
+              message:
+                'publish is an integration layer; depend on domain controllers/public abstractions, not internals.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     // Node/CommonJS-style workspace files
     files: ['**/*.cjs'],
     languageOptions: {
