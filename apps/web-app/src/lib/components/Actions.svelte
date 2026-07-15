@@ -16,12 +16,13 @@
 <script lang="ts">
   import PillButton from './PillButton.svelte';
   import CameraSettingsMenu from './CameraSettingsMenu.svelte';
-  import type { CameraState, DeviceOption, VideoQuality } from '$lib/camera/core';
+  import type { CameraState, DeviceOption, VideoQuality } from '$lib/camera/media';
   import type { ModelState } from '$lib/camera/effects';
+  import type { RoomConnectionState } from '$lib/camera/room';
 
   type Props = {
     // Room state
-    connectionState: string;
+    connectionState: RoomConnectionState;
     onCreate: () => void;
     onJoin: () => void;
 

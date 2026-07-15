@@ -1,5 +1,5 @@
-import { FACE_OVAL_INDICES } from '$lib/camera/core';
-import type { FaceLandmarkerResult } from '$lib/camera/tracking';
+import { FACE_OVAL_INDICES } from '../geometry/face-region-indices.ts';
+import type { FaceLandmarkerResult } from '../tracking.ts';
 
 type Landmark2D = readonly [x: number, y: number];
 

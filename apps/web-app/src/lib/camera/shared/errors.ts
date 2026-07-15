@@ -1,7 +1,3 @@
-/**
- * by ove. 2026
- */
-
 export type MediaTarget = 'camera' | 'microphone' | 'media';
 
 const TARGET_LABEL: Record<MediaTarget, string> = {

@@ -1,4 +1,3 @@
-// lib/camera/constants.ts
 export const COMPOSITION_FPS = {
   CONNECTED_DESKTOP: 30,
   CONNECTED_MOBILE: 24,

@@ -1,30 +1,14 @@
 <!--
-    Main camera page.
-
-    This file is the orchestration layer for the full camera page. It wires
-    together four controllers and renders the visual stage. The controllers
-    do the work:
-
-      - MediaController:   camera + microphone streams, devices, quality.
-      - RoomController:    LiveKit room lifecycle and participant tiles.
-      - EffectsController: face tracking, overlay rendering, 3D mask,
-                           uploads, and the composition pipeline.
-      - PublishController: track publishing — bridges MediaController +
-                           EffectsController.composition to the room.
-
-    The heavy browser helpers live in src/lib/camera/*. This file decides
-    when the controllers run and how their state affects the UI.
+  Main camera page.
+  This route is mostly UI wiring.
+  Camera orchestration lives in $lib/camera/controller.svelte.ts.
 -->
 
 <script lang="ts">
   import '$lib/styles/camera-page.css';
   import { onDestroy, onMount } from 'svelte';
 
-  import { MediaController } from '$lib/camera/controllers/media.svelte';
-  import { RoomController } from '$lib/camera/controllers/room.svelte';
-  import { PublishController } from '$lib/camera/controllers/publish.svelte';
-  import { EffectsController } from '$lib/camera/controllers/effects.svelte';
-  import { BannerStore } from '$lib/camera/banner.svelte';
+  import { CameraController } from '$lib/camera/controller.svelte.ts';
 
   import cameraOff from '$lib/images/camera-off.svg';
   import cameraOn from '$lib/images/camera-on.svg';
@@ -36,6 +20,7 @@
   import modelIcon from '$lib/images/model.svg';
   import eyeOpenIcon from '$lib/images/eye-open.svg';
   import eyeClosedIcon from '$lib/images/eye-close.svg';
+  import loadingIcon from '$lib/images/loading.svg';
 
   import EffectsMenu from '$lib/components/EffectsMenu.svelte';
   import MediaControls from '$lib/components/MediaControls.svelte';
@@ -49,155 +34,26 @@
   // --- DOM refs ---
   let videoEl = $state<HTMLVideoElement | null>(null);
   let previewContainerEl = $state<HTMLDivElement | null>(null);
-  let roomPrompt = $state<{ kind: 'room' | 'user'; initialValue: string } | null>(null);
-  let resolveRoomPrompt: ((value: string | null) => void) | null = null;
-
-  // --- Stores / inline helpers ---
-  const banner = new BannerStore();
-
-  // RoomController awaits these values, while the Svelte prompt remains
-  // non-blocking so the mobile camera render loop keeps running.
-  function requestRoomPrompt(kind: 'room' | 'user', previous: string): Promise<string | null> {
-    return new Promise((resolve) => {
-      resolveRoomPrompt = resolve;
-      roomPrompt = {
-        kind,
-        initialValue: previous || (kind === 'room' ? 'amphi-room' : 'guest')
-      };
-    });
-  }
-
-  function completeRoomPrompt(value: string | null): void {
-    const resolve = resolveRoomPrompt;
-    resolveRoomPrompt = null;
-    roomPrompt = null;
-    resolve?.(value);
-  }
-
-  // ------------------------------------------------------------------
-  // Controllers
-  // ------------------------------------------------------------------
-  //
-  // Construction order matters because of cross-references:
-  //
-  //   media  → no deps
-  //   room   → media
-  //   effects → media, room (also owns composition)
-  //   publish → media, room, effects.composition
-  //
-  // The onMediaChanged / onRoomChanged callbacks reach back into `publish`
-  // and `effects` which are declared after — `publish` and `effects` are
-  // captured by closure and are non-null by the time any callback fires.
-
-  // ------------------------------------------------------------------
-  let publish: PublishController | undefined;
-
-  const media = new MediaController({
+  const camera = new CameraController({
     getVideoElement: () => videoEl,
-    onError: (message) => {
-      banner.showError(message);
-    },
-    onMediaChanged: (reason) => {
-      publish?.onMediaChanged(reason);
-
-      if ((reason === 'camera-started' || reason === 'video-device-changed') && room?.isConnected) {
-        effects?.restartCompositionIfNeeded();
-      }
-
-      if (
-        reason === 'camera-started' ||
-        reason === 'camera-stopped' ||
-        reason === 'camera-toggled' ||
-        reason === 'video-device-changed' ||
-        reason === 'quality-changed'
-      ) {
-        effects?.syncTracking();
-      }
-    }
+    getPreviewContainer: () => previewContainerEl
   });
 
-  const room = new RoomController({
-    media,
-    promptRoomName: (previous) => requestRoomPrompt('room', previous),
-    promptUserName: (previous) => requestRoomPrompt('user', previous),
-    onInfo: (message) => {
-      banner.showInfo(message);
-    },
-    onError: (message) => {
-      banner.showError(message);
-    },
-    onRoomChanged: (reason) => {
-      publish?.onRoomChanged(reason);
-
-      if (reason === 'connected') {
-        effects?.startCompositionSession();
-      }
-
-      if (reason === 'disconnected') {
-        effects?.stopCompositionSession();
-      }
-    }
-  });
-
-  const effects = new EffectsController({
-    media,
-    room,
-    onInfo: (message) => {
-      banner.showInfo(message);
-    },
-    onError: (message) => {
-      banner.showError(message);
-    },
-    onCompositionReady: () => {
-      // Track exists — if we're already in a room, publish it.
-      publish?.queueSync();
-    }
-  });
-
-  publish = new PublishController({
-    media,
-    room,
-    getCompositionTrack: () => effects.compositionTrack,
-    onError: (message) => {
-      banner.showError(message);
-    }
-  });
+  const media = camera.media;
+  const room = camera.room;
+  const effects = camera.effects;
+  const banner = camera.banner;
 
   // ------------------------------------------------------------------
   // Reactive glue
   // ------------------------------------------------------------------
 
-  /**
-   * Effects pipeline driver. Re-runs whenever any input the effects layer
-   * cares about changes. The controller's syncAll() is cheap when nothing
-   * meaningful has changed.
-   */
   $effect(() => {
-    media.cameraStream;
-    media.cameraEnabled;
-    media.cameraState;
-
-    // New effects state — re-sync when any of these change
-    effects.state.webcamVisibility;
-    effects.state.showLandmarksDebug;
-    effects.state.background.kind;
-    effects.state.background.imageUrl;
-    effects.state.model.enabled;
-    effects.state.model.url;
-    effects.state.model.scale;
-    effects.state.model.offsetX;
-    effects.state.model.offsetY;
-    effects.state.model.rotationY;
-
-    room.connectionState;
-
-    effects.syncAll();
+    camera.syncEffectsReactivity();
   });
 
   $effect(() => {
-    if (room.isConnected) {
-      room.rebuildParticipantTiles();
-    }
+    camera.syncParticipantTilesReactivity();
   });
 
   // ------------------------------------------------------------------
@@ -205,34 +61,11 @@
   // ------------------------------------------------------------------
 
   onMount(async () => {
-    media.init();
-    await media.startAll();
-
-    if (!videoEl || !previewContainerEl) {
-      banner.showError('Camera stage is not ready yet. Please refresh the page.');
-      return;
-    }
-
-    effects.init();
-    effects.attachElements({
-      video: videoEl,
-      previewContainer: previewContainerEl
-    });
-    effects.syncAll();
-
-    // Dev-only debug handle. Never expose controllers on window in production.
-    if (import.meta.env.DEV) {
-      (window as any).debug = { effects, room, media, publish };
-    }
+    await camera.mount();
   });
 
   onDestroy(() => {
-    // Reverse construction order: tear down consumers before producers.
-    publish?.dispose();
-    effects.dispose();
-    room.dispose();
-    media.dispose();
-    banner.dispose();
+    camera.dispose();
   });
 </script>
 
@@ -240,14 +73,14 @@
   <title>Camera</title>
 </svelte:head>
 
-<div class:camera-view={true} class:in-room={room.connectionState === 'connected'}>
-  {#if roomPrompt}
+<div class="camera-view" class:in-room={room.connectionState === 'connected'}>
+  {#if camera.roomPrompt}
     <RoomPrompt
-      title={roomPrompt.kind === 'room' ? 'Choose a room' : 'Choose your name'}
-      label={roomPrompt.kind === 'room' ? 'Room name' : 'Display name'}
-      initialValue={roomPrompt.initialValue}
-      onSubmit={(value) => completeRoomPrompt(value)}
-      onCancel={() => completeRoomPrompt(null)}
+      title={camera.roomPrompt.kind === 'room' ? 'Choose a room' : 'Choose your name'}
+      label={camera.roomPrompt.kind === 'room' ? 'Room name' : 'Display name'}
+      initialValue={camera.roomPrompt.initialValue}
+      onSubmit={(value) => camera.completeRoomPrompt(value)}
+      onCancel={() => camera.completeRoomPrompt(null)}
     />
   {/if}
 
@@ -263,7 +96,7 @@
 
   {#if room.connectionState === 'connecting'}
     <div class="connection-status" role="status" aria-live="polite">
-      <span class="connection-spinner" aria-hidden="true"></span>
+      <img class="connection-spinner" src={loadingIcon} alt="Loading indicator" />
       {room.connectionStatus || 'Connecting…'}
     </div>
   {/if}
@@ -297,7 +130,7 @@
   />
 
   <div class="banners">
-    {#if media.cameraState === 'error' || media.microphoneState === 'error' || banner.error}
+    {#if camera.hasErrorBanner}
       <Banner message={banner.error || media.errorMessage} tone="error" />
     {/if}
 
@@ -309,9 +142,7 @@
   <MediaControls>
     {#if room.connectionState === 'connected'}
       <div class="leave-control">
-        <PillButton tone="danger" onclick={() => room.leave({ restartMedia: true })}>
-          Leave
-        </PillButton>
+        <PillButton tone="danger" onclick={() => room.leave(true)}>Leave</PillButton>
       </div>
     {/if}
 
@@ -414,18 +245,11 @@
   }
 
   .connection-spinner {
-    width: 0.85rem;
-    height: 0.85rem;
-    border: 2px solid rgb(255 255 255 / 30%);
-    border-top-color: var(--text-primary);
-    border-radius: 50%;
-    animation: spin 800ms linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    width: 1rem;
+    height: 1rem;
+    color: var(--text-primary);
+    flex: 0 0 auto;
+    filter: invert(1);
   }
 
   @media (max-width: 640px) {

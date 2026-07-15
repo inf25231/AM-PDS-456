@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import type { CameraEffectsState } from '$lib/camera/effects';
-import { FACE_OVAL_INDICES, computeCoverTransform, averagePoint, getBBox } from '$lib/camera/core';
-import type { FaceLandmarkerResult } from '$lib/camera/tracking';
+import type { CameraEffectsState } from '../state.ts';
+import { FACE_OVAL_INDICES } from '../geometry/face-region-indices.ts';
+import { computeCoverTransform, averagePoint, getBBox } from '../geometry/face-geometry.ts';
+import type { FaceLandmarkerResult } from '../tracking.ts';
 
 type Landmark = { x: number; y: number; z: number };
 
@@ -287,7 +288,6 @@ export class ThreeMaskRenderer {
         return;
       }
 
-      const material = node.material;
       const apply = (mat: THREE.Material) => {
         const withOpacity = mat as THREE.Material & {
           opacity?: number;
@@ -299,16 +299,7 @@ export class ThreeMaskRenderer {
         withOpacity.needsUpdate = true;
       };
 
-      if (Array.isArray(material)) {
-        for (const item of material) {
-          apply(item);
-        }
-        return;
-      }
-
-      if (material) {
-        apply(material);
-      }
+      this.forEachMaterial(node.material, apply);
     });
   }
 
@@ -320,16 +311,24 @@ export class ThreeMaskRenderer {
 
       node.geometry?.dispose();
 
-      const material = node.material;
-      if (Array.isArray(material)) {
-        for (const item of material) {
-          item.dispose();
-        }
-        return;
-      }
-
-      material?.dispose();
+      this.forEachMaterial(node.material, (material) => material.dispose());
     });
+  }
+
+  private forEachMaterial(
+    material: THREE.Material | THREE.Material[] | undefined,
+    applyToMaterial: (material: THREE.Material) => void
+  ) {
+    if (Array.isArray(material)) {
+      for (const item of material) {
+        applyToMaterial(item);
+      }
+      return;
+    }
+
+    if (material) {
+      applyToMaterial(material);
+    }
   }
 
   private applyBlendshapes(result: FaceLandmarkerResult) {

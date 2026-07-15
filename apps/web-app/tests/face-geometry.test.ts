@@ -1,7 +1,12 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeCoverTransform, averagePoint, getBBox, type MappedPoint } from './face-geometry.ts';
+import {
+  computeCoverTransform,
+  averagePoint,
+  getBBox,
+  type MappedPoint
+} from '../src/lib/camera/effects/geometry/face-geometry.ts';
 
 describe('computeCoverTransform', () => {
   test('returns identity-ish defaults when any dimension is zero/missing', () => {

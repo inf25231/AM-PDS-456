@@ -1,5 +1,19 @@
-import type { CameraEffectsState } from '$lib/camera/effects';
-import type { FaceLandmarkerResult } from '$lib/camera/tracking';
+/**
+ * CompositionController
+ *
+ * Renders webcam + effects into one canvas and exposes a video track from
+ * `canvas.captureStream(...)` for publishing.
+ *
+ * Lifecycle:
+ *   const composition = new CompositionController(opts);
+ *   composition.startRenderLoop();
+ *   composition.startNewSessionTrack();
+ *   composition.stopSessionTrack();
+ *   composition.dispose();
+ */
+
+import type { CameraEffectsState } from './state.ts';
+import type { FaceLandmarkerResult } from './tracking.ts';
 
 export interface CompositionControllerOptions {
   getVideoElement: () => HTMLVideoElement | null;
@@ -127,13 +141,11 @@ export class CompositionController {
       this.startRetryHandle = null;
     }
     this.teardownStreamOnly();
-    console.log('[composition] stopped session track');
   }
 
   restartIfEnded(): void {
     if (this.disposed) return;
     if (this.track && this.track.readyState !== 'ended') return;
-    console.log('[composition] track ended -> recreating');
     this.startNewSessionTrack();
   }
 
@@ -204,9 +216,8 @@ export class CompositionController {
   private syncCanvasSize(width: number, height: number): void {
     const nextWidth = Math.max(1, Math.round(width));
     const nextHeight = Math.max(1, Math.round(height));
-    if (this.canvas.width === nextWidth && this.canvas.height === nextHeight) {
-      return;
-    }
+    if (this.canvas.width === nextWidth && this.canvas.height === nextHeight) return;
+
     this.canvas.width = nextWidth;
     this.canvas.height = nextHeight;
   }

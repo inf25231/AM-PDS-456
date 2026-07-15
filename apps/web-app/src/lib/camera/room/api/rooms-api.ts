@@ -13,10 +13,7 @@ export type JoinRoomResponse = {
  *
  * Override at build time via VITE_SIGNALING_PREFIX env var.
  */
-const API_PREFIX: string =
-  (typeof import.meta !== 'undefined'
-    ? (import.meta as any).env?.VITE_SIGNALING_PREFIX
-    : undefined) ?? '/api';
+const API_PREFIX: string = import.meta.env.VITE_SIGNALING_PREFIX ?? '/api';
 
 async function parseJson<T>(response: Response): Promise<T> {
   const data = (await response.json()) as T & { error?: string };

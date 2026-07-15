@@ -6,8 +6,8 @@
   import loadingIcon from '$lib/images/loading.svg';
   import cameraOffIcon from '$lib/images/camera-off.svg';
 
-  import type { CameraState } from '$lib/camera/core';
-  import type { RoomConnectionState } from '$lib/camera/controllers/room.svelte';
+  import type { CameraState } from '$lib/camera/media';
+  import type { ParticipantTile, RoomConnectionState } from '$lib/camera/room';
 
   type Props = {
     videoEl?: HTMLVideoElement;
@@ -15,7 +15,7 @@
 
     roomName: string | null;
     connectionState: RoomConnectionState;
-    participants: any[];
+    participants: ParticipantTile[];
 
     cameraState: CameraState;
     cameraEnabled: boolean;

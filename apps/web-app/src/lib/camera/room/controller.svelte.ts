@@ -1,31 +1,14 @@
-// src/lib/camera/controllers/room.svelte.ts
-
 /**
  * RoomController
  *
- * Reactive (Svelte 5 runes) controller for the LiveKit room lifecycle.
- *
- * Responsibilities:
- *  - Owns the LiveKit Room instance and connection state.
- *  - Handles create / join / leave flows, including the "ensure media is ready"
- *    pre-call step delegated to MediaController.
- *  - Registers LiveKit room events and translates them into reactive state
- *    the UI can render directly (participantTiles).
- *  - Tracks remote participant MediaStreams in a dedicated Map so <video>
- *    elements can bind to a single stable stream per participant.
- *  - Uses a monotonically increasing session id so events from previous
- *    rooms cannot corrupt state after a fast reconnect.
+ * Owns LiveKit room connection lifecycle and participant tiles, including
+ * remote track stream wiring and local preview tile state.
  *
  * Lifecycle:
- *   const room = new RoomController({
- *       media,
- *       storage: () => localStorage,
- *       onInfo: (msg) => banner.showInfo(msg),
- *       onError: (msg) => banner.showError(msg),
- *   });
- *   await room.create();
- *   await room.join();
- *   await room.leave();
+ *   const room = new RoomController({ media, onInfo, onError, onRoomChanged });
+ *   await room.create(); // or room.join()
+ *   room.rebuildParticipantTiles();
+ *   await room.leave(true);
  *   room.dispose();
  */
 
@@ -33,21 +16,15 @@ import {
   ConnectionQuality,
   Room,
   RoomEvent,
-  Track,
-  type Participant,
   type RemoteParticipant,
-  type RemoteTrack,
-  type RemoteTrackPublication
+  type RemoteTrack
 } from 'livekit-client';
 
-import { createRoom, joinRoom } from '$lib/calls/rooms-api';
-import { getMediaErrorMessage } from '$lib/camera/errors';
-import type { MediaController } from './media.svelte.js';
+import { createRoom, joinRoom } from './api/rooms-api.ts';
+import { getRemoteMediaState } from './core/participant-media.ts';
+import { getMediaErrorMessage } from '../shared/errors.ts';
+import type { MediaController } from '../media/index.ts';
 import { SvelteMap } from 'svelte/reactivity';
-
-// ----------------------------------------------------------------------
-// Public types
-// ----------------------------------------------------------------------
 
 export type RoomConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -71,79 +48,35 @@ export type RoomChangeReason =
   | 'media-toggled';
 
 export interface RoomControllerOptions {
-  /** The MediaController whose streams will be used for the call. */
   media: MediaController;
-
-  /** Storage used for remembering the last room/user name. Defaults to localStorage. */
   storage?: () => Storage;
-
-  /**
-   * Called whenever the UI should show an info banner (e.g. "X joined").
-   */
   onInfo?: (message: string) => void;
-
-  /**
-   * Called whenever the UI should show an error (connection failed, etc.).
-   */
   onError?: (message: string) => void;
-
-  /**
-   * Called after any change that the publishing layer should react to.
-   */
   onRoomChanged?: (reason: RoomChangeReason) => void;
-
-  /**
-   * Async function that asks the user for the room name. Defaults to
-   * window.prompt(). Override for custom UI.
-   */
   promptRoomName?: (previous: string) => Promise<string | null> | string | null;
-
-  /**
-   * Async function that asks the user for their display name. Defaults to
-   * window.prompt(). Override for custom UI.
-   */
   promptUserName?: (previous: string) => Promise<string | null> | string | null;
 }
 
 const ROOM_NAME_STORAGE_KEY = 'amphi.room.name';
 const USER_NAME_STORAGE_KEY = 'amphi.user.name';
-
-// ----------------------------------------------------------------------
-// Controller
-// ----------------------------------------------------------------------
+const ROOM_DISCONNECT_TIMEOUT_MS = 1500;
 
 export class RoomController {
-  // --- Connection state ---
   connectionState = $state<RoomConnectionState>('disconnected');
   connectionError = $state('');
   connectionStatus = $state('');
   activeRoomName = $state<string | null>(null);
 
-  // --- Participants ---
   participantTiles = $state<ParticipantTile[]>([]);
 
-  // --- Internals ---
   private readonly opts: RoomControllerOptions;
   private readonly media: MediaController;
-
-  /** The current LiveKit Room instance, or null when disconnected. */
   private room: Room | null = null;
 
-  /**
-   * Monotonic id incremented on every connect / leave. LiveKit event handlers
-   * capture the id at registration time and skip if it has moved on — this
-   * prevents events from a previous room (still draining) from mutating new
-   * state.
-   */
+  // Incremented on every connect/leave; guards stale event handlers.
   sessionId = $state(0);
-
-  /** Remote participant streams, keyed by participant identity. */
   private readonly participantStreams = new SvelteMap<string, MediaStream>();
-
-  /** Previous participant count, used to emit join/leave info banners. */
   private lastParticipantCount = 0;
-
-  /** Optional MediaStream used by the local preview tile. */
   private localPreviewStream: MediaStream | null = null;
 
   private disposed = false;
@@ -153,27 +86,23 @@ export class RoomController {
     this.media = opts.media;
   }
 
-  // ==================================================================
-  // Public API
-  // ==================================================================
-
-  /** True while the controller is connected to a room. */
   get isConnected(): boolean {
     return this.connectionState === 'connected';
   }
 
-  /** The underlying LiveKit room, or null when disconnected. Read-only escape hatch. */
   get livekitRoom(): Room | null {
     return this.room;
   }
 
-  /**
-   * Create a brand-new room and join it.
-   *
-   * Prompts the user for the room name and their display name, ensures
-   * camera + microphone are ready, then connects.
-   */
   async create(): Promise<void> {
+    await this.startRoomFlow('create');
+  }
+
+  async join(): Promise<void> {
+    await this.startRoomFlow('join');
+  }
+
+  private async startRoomFlow(mode: 'create' | 'join'): Promise<void> {
     if (this.disposed) return;
 
     const requestedRoomName = await this.askRoomName();
@@ -184,39 +113,14 @@ export class RoomController {
 
     try {
       this.connectionState = 'connecting';
-      this.connectionStatus = 'Preparing camera…';
-      await this.media.ensureReadyForCall();
-      this.connectionStatus = 'Creating room…';
-      const createdRoom = await createRoom(requestedRoomName, requestedRoomName);
-      await this.connect(createdRoom.room.name, username);
-    } catch (error) {
-      this.connectionState = 'error';
-      this.connectionStatus = '';
-      this.connectionError = getMediaErrorMessage('media', error);
-      this.opts.onError?.(this.connectionError);
-    }
-  }
+      this.connectionStatus = mode === 'create' ? 'Creating room…' : 'Joining room…';
 
-  /**
-   * Join an existing room.
-   *
-   * Prompts the user for the room name and their display name, ensures
-   * camera + microphone are ready, then connects.
-   */
-  async join(): Promise<void> {
-    if (this.disposed) return;
+      let roomName = requestedRoomName;
+      if (mode === 'create') {
+        const createdRoom = await createRoom(requestedRoomName, requestedRoomName);
+        roomName = createdRoom.room.name;
+      }
 
-    const roomName = await this.askRoomName();
-    if (!roomName) return;
-
-    const username = await this.askUserName();
-    if (!username) return;
-
-    try {
-      this.connectionState = 'connecting';
-      this.connectionStatus = 'Preparing camera…';
-      await this.media.ensureReadyForCall();
-      this.connectionStatus = 'Joining room…';
       await this.connect(roomName, username);
     } catch (error) {
       this.connectionState = 'error';
@@ -226,16 +130,8 @@ export class RoomController {
     }
   }
 
-  /**
-   * Leave the current room. Safe to call when already disconnected.
-   *
-   * Pass `restartMedia: true` to fully recycle the local camera + microphone
-   * streams after leaving (recovery flow). The default is a clean leave.
-   */
-  async leave(options: { restartMedia?: boolean } = {}): Promise<void> {
+  async leave(restartMedia = false): Promise<void> {
     if (this.disposed) return;
-
-    const { restartMedia = false } = options;
     this.sessionId += 1;
 
     if (!this.room) {
@@ -244,33 +140,23 @@ export class RoomController {
       return;
     }
 
-    // Race the disconnect against a short timeout so the UI never freezes
-    // waiting for a stuck server connection to acknowledge.
-    await Promise.race([
-      Promise.resolve(this.room.disconnect()),
-      new Promise((resolve) => window.setTimeout(resolve, 1500))
-    ]);
+    await this.disconnectRoomWithTimeout();
 
     this.resetRoomState();
     this.opts.onRoomChanged?.('disconnected');
 
     if (restartMedia) {
       try {
-        await this.media.restartActiveMedia({
-          restartCamera: Boolean(this.media.cameraStream),
-          restartMicrophone: Boolean(this.media.microphoneStream)
-        });
+        await this.media.restartActiveMedia(
+          Boolean(this.media.cameraStream),
+          Boolean(this.media.microphoneStream)
+        );
       } catch {
-        // Keep current streams if restart fails — the user can still
-        // toggle them manually from the controls.
+        // Keep current streams if restart fails.
       }
     }
   }
 
-  /**
-   * Rebuild the visible participant tile list from the current LiveKit
-   * room state. Safe to call any time; cheap when nothing changed.
-   */
   rebuildParticipantTiles(): void {
     if (!this.room || !this.isConnected) {
       this.participantTiles = [];
@@ -293,18 +179,7 @@ export class RoomController {
 
     for (const participant of this.room.remoteParticipants.values()) {
       const identity = participant.identity;
-
-      const hasRemoteCamera = [...participant.trackPublications.values()].some(
-        (p) =>
-          p.kind === 'video' && p.source === Track.Source.Camera && Boolean(p.track) && !p.isMuted
-      );
-      const hasRemoteMic = [...participant.trackPublications.values()].some(
-        (p) =>
-          p.kind === 'audio' &&
-          p.source === Track.Source.Microphone &&
-          Boolean(p.track) &&
-          !p.isMuted
-      );
+      const remoteMediaState = getRemoteMediaState(participant.trackPublications.values());
 
       tiles.push({
         id: identity,
@@ -312,13 +187,12 @@ export class RoomController {
         isLocal: false,
         isSpeaking: participant.isSpeaking,
         connectionQuality: this.qualityLabel(participant.connectionQuality),
-        cameraOn: hasRemoteCamera,
-        microphoneOn: hasRemoteMic,
+        cameraOn: remoteMediaState.cameraOn,
+        microphoneOn: remoteMediaState.microphoneOn,
         stream: this.participantStreams.get(identity) ?? null
       });
     }
 
-    // Emit join/leave info banners based on count changes.
     if (this.isConnected && this.lastParticipantCount !== 0) {
       if (tiles.length > this.lastParticipantCount) {
         this.opts.onInfo?.('A participant joined the room.');
@@ -331,24 +205,13 @@ export class RoomController {
     this.participantTiles = tiles;
   }
 
-  /** Dispose the controller. Disconnects and clears all state. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     void this.leave();
   }
 
-  // ==================================================================
-  // Connection internals
-  // ==================================================================
-
-  /**
-   * Low-level connect path used by both `create()` and `join()`.
-   */
   private async connect(roomName: string, username: string): Promise<void> {
-    this.sessionId += 1;
-    let activeSession = this.sessionId;
-
     let room: Room | null = null;
     this.connectionError = '';
     this.connectionState = 'connecting';
@@ -356,11 +219,10 @@ export class RoomController {
 
     try {
       if (this.room) {
-        await this.leave({ restartMedia: false });
-        // Allocate a fresh session id after the forced leave.
-        this.sessionId += 1;
-        activeSession = this.sessionId;
+        await this.leave(false);
       }
+      this.sessionId += 1;
+      const activeSession = this.sessionId;
 
       const joinResponse = await joinRoom(roomName, username);
       room = new Room({
@@ -383,12 +245,11 @@ export class RoomController {
         this.opts.onInfo?.(`Your name was adjusted to ${joinResponse.username}.`);
       }
 
-      // Seed any tracks already subscribed before our event handlers
-      // were attached (rare but possible for fast-connecting peers).
+      // Pick up tracks that might already be subscribed.
       for (const participant of room.remoteParticipants.values()) {
         for (const pub of participant.trackPublications.values()) {
           if (pub.isSubscribed && pub.track) {
-            this.addTrackToParticipantStream(participant, pub.track);
+            this.addParticipantTrack(participant.identity, pub.track.mediaStreamTrack, false);
           }
         }
       }
@@ -400,7 +261,7 @@ export class RoomController {
       try {
         await room?.disconnect();
       } catch {
-        // Ignore cleanup failures after a failed join attempt.
+        // ignore cleanup failure
       }
       this.room = null;
       this.activeRoomName = null;
@@ -411,10 +272,6 @@ export class RoomController {
     }
   }
 
-  /**
-   * Register LiveKit event handlers for a freshly connected room.
-   * All handlers verify the captured session id before mutating state.
-   */
   private registerRoomEvents(room: Room, sessionId: number): void {
     const isActiveSession = () => sessionId === this.sessionId && room === this.room;
 
@@ -433,32 +290,22 @@ export class RoomController {
 
     room.on(
       RoomEvent.TrackSubscribed,
-      (
-        track: RemoteTrack,
-        _publication: RemoteTrackPublication,
-        participant: RemoteParticipant
-      ) => {
+      (track: RemoteTrack, _publication, participant: RemoteParticipant) => {
         if (!isActiveSession()) return;
-        this.addTrackToParticipantStream(participant, track);
+        this.addParticipantTrack(participant.identity, track.mediaStreamTrack);
         this.opts.onRoomChanged?.('tracks-changed');
       }
     );
 
     room.on(
       RoomEvent.TrackUnsubscribed,
-      (
-        track: RemoteTrack,
-        _publication: RemoteTrackPublication,
-        participant: RemoteParticipant
-      ) => {
+      (track: RemoteTrack, _publication, participant: RemoteParticipant) => {
         if (!isActiveSession()) return;
-        this.removeTrackFromParticipantStream(participant, track);
+        this.removeParticipantTrack(participant.identity, track.mediaStreamTrack);
         this.opts.onRoomChanged?.('tracks-changed');
       }
     );
 
-    // Mute / unmute events are noisy but cheap — rebuild tiles so the
-    // mic/camera badges stay correct without flicker.
     const muteEvents = [
       RoomEvent.TrackMuted,
       RoomEvent.TrackUnmuted,
@@ -484,46 +331,34 @@ export class RoomController {
     });
   }
 
-  // ==================================================================
-  // Participant stream bookkeeping
-  // ==================================================================
-
-  private addTrackToParticipantStream(
-    participant: Participant | RemoteParticipant,
-    track: unknown
+  private addParticipantTrack(
+    identity: string,
+    mediaTrack: MediaStreamTrack,
+    rebuildTiles = true
   ): void {
-    const mediaTrack = this.toMediaStreamTrack(track);
-    if (!mediaTrack) return;
-
-    const stream = this.getOrCreateParticipantStream(participant.identity);
-    const existing = stream
-      .getTracks()
-      .find((item) => item.id === mediaTrack.id || item.kind === mediaTrack.kind);
-    if (existing) {
-      stream.removeTrack(existing);
+    const stream = this.getOrCreateParticipantStream(identity);
+    for (const existingTrack of stream.getTracks()) {
+      if (existingTrack.id === mediaTrack.id || existingTrack.kind === mediaTrack.kind) {
+        stream.removeTrack(existingTrack);
+        break;
+      }
     }
     stream.addTrack(mediaTrack);
-    this.rebuildParticipantTiles();
+    if (rebuildTiles) this.rebuildParticipantTiles();
   }
 
-  private removeTrackFromParticipantStream(
-    participant: Participant | RemoteParticipant,
-    track: unknown
-  ): void {
-    const mediaTrack = this.toMediaStreamTrack(track);
-    if (!mediaTrack) return;
-
-    const stream = this.participantStreams.get(participant.identity);
+  private removeParticipantTrack(identity: string, mediaTrack: MediaStreamTrack): void {
+    const stream = this.participantStreams.get(identity);
     if (!stream) return;
 
-    for (const item of stream.getTracks()) {
-      if (item.id === mediaTrack.id || item.kind === mediaTrack.kind) {
-        stream.removeTrack(item);
+    for (const existingTrack of stream.getTracks()) {
+      if (existingTrack.id === mediaTrack.id || existingTrack.kind === mediaTrack.kind) {
+        stream.removeTrack(existingTrack);
       }
     }
 
     if (stream.getTracks().length === 0) {
-      this.participantStreams.delete(participant.identity);
+      this.participantStreams.delete(identity);
     }
 
     this.rebuildParticipantTiles();
@@ -571,10 +406,6 @@ export class RoomController {
     return stream;
   }
 
-  // ==================================================================
-  // Helpers
-  // ==================================================================
-
   private resetRoomState(): void {
     this.room = null;
     this.activeRoomName = null;
@@ -585,6 +416,16 @@ export class RoomController {
     this.participantTiles = [];
     this.lastParticipantCount = 0;
     this.localPreviewStream = null;
+  }
+
+  private async disconnectRoomWithTimeout(): Promise<void> {
+    if (!this.room) return;
+
+    // Never block UI forever if disconnect hangs.
+    await Promise.race([
+      Promise.resolve(this.room.disconnect()),
+      new Promise<void>((resolve) => window.setTimeout(resolve, ROOM_DISCONNECT_TIMEOUT_MS))
+    ]);
   }
 
   private rememberSession(roomName: string, userName: string): void {
@@ -634,25 +475,13 @@ export class RoomController {
 
   private qualityLabel(quality: ConnectionQuality | undefined): string {
     if (quality === undefined) return 'unknown';
-    const label =
-      typeof quality === 'number'
-        ? String((ConnectionQuality as unknown as Record<number, string>)[quality] || 'unknown')
-        : String(quality);
-    return label.toLowerCase();
+    const labelFromEnum = ConnectionQuality[quality];
+    if (typeof labelFromEnum === 'string') {
+      return labelFromEnum.toLowerCase();
+    }
+    return String(quality).toLowerCase();
   }
 
-  private toMediaStreamTrack(track: unknown): MediaStreamTrack | null {
-    if (!track || typeof track !== 'object') return null;
-    const maybe = (track as { mediaStreamTrack?: MediaStreamTrack }).mediaStreamTrack;
-    return maybe instanceof MediaStreamTrack ? maybe : null;
-  }
-
-  /**
-   * Returns true if the given captured session id still matches the current
-   * session AND the controller is connected. Used by other controllers
-   * (PublishController, EffectsController) to abort long-running async work
-   * after a disconnect or reconnect.
-   */
   isSessionActive(capturedId: number): boolean {
     return capturedId === this.sessionId && this.isConnected;
   }
