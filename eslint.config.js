@@ -101,7 +101,12 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['$lib/camera/media/**', '$lib/camera/room/**', '$lib/camera/effects/**', '$lib/camera/publish/**'],
+              group: [
+                '$lib/camera/media/**',
+                '$lib/camera/room/**',
+                '$lib/camera/effects/**',
+                '$lib/camera/publish/**'
+              ],
               message:
                 'media/room/effects are independent domains. Do not import camera domains via alias from inside these domains.'
             }

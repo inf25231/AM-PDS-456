@@ -217,10 +217,7 @@ export class PublishController {
     this.publishedAudioTrack = null;
   }
 
-  private findPublishedTrackById(
-    kind: PublishKind,
-    trackId: string
-  ): LocalTrackPublication | null {
+  private findPublishedTrackById(kind: PublishKind, trackId: string): LocalTrackPublication | null {
     const livekitRoom = this.room.livekitRoom;
     if (!livekitRoom) return null;
 

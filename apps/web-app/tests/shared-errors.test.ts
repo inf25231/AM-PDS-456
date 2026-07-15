@@ -11,7 +11,10 @@ describe('getMediaErrorMessage', () => {
 
   test('maps NotFoundError to device-not-found message', () => {
     const error = new DOMException('', 'NotFoundError');
-    assert.equal(getMediaErrorMessage('microphone', error), 'Microphone was not found on this device.');
+    assert.equal(
+      getMediaErrorMessage('microphone', error),
+      'Microphone was not found on this device.'
+    );
   });
 
   test('returns Error.message for regular Error', () => {

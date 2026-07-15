@@ -77,7 +77,11 @@ export function startFaceTracking(
         return;
       }
 
-      if (hasVideoFrame(videoEl) && videoEl.currentTime !== lastVideoTime && now - lastInferTime >= minIntervalMs) {
+      if (
+        hasVideoFrame(videoEl) &&
+        videoEl.currentTime !== lastVideoTime &&
+        now - lastInferTime >= minIntervalMs
+      ) {
         lastVideoTime = videoEl.currentTime;
         lastInferTime = now;
         onResults(landmarker.detectForVideo(videoEl, now));

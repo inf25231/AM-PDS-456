@@ -194,10 +194,7 @@ describe('media runtime helpers', () => {
   test('stopStream stops all tracks', () => {
     let stopped = 0;
     const stream = {
-      getTracks: () => [
-        { stop: () => (stopped += 1) },
-        { stop: () => (stopped += 1) }
-      ]
+      getTracks: () => [{ stop: () => (stopped += 1) }, { stop: () => (stopped += 1) }]
     } as unknown as MediaStream;
 
     stopStream(stream);

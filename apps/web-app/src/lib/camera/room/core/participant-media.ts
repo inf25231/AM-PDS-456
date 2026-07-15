@@ -31,7 +31,9 @@ export function hasEnabledTrack(
   return false;
 }
 
-export function getRemoteMediaState(publications: Iterable<TrackPublicationLike>): RemoteMediaState {
+export function getRemoteMediaState(
+  publications: Iterable<TrackPublicationLike>
+): RemoteMediaState {
   let cameraOn = false;
   let microphoneOn = false;
 

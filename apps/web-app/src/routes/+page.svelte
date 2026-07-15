@@ -142,9 +142,7 @@
   <MediaControls>
     {#if room.connectionState === 'connected'}
       <div class="leave-control">
-        <PillButton tone="danger" onclick={() => room.leave(true)}>
-          Leave
-        </PillButton>
+        <PillButton tone="danger" onclick={() => room.leave(true)}>Leave</PillButton>
       </div>
     {/if}
 

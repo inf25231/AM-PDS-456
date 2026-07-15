@@ -2,11 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { CameraEffectsState } from '../state.ts';
 import { FACE_OVAL_INDICES } from '../geometry/face-region-indices.ts';
-import {
-  computeCoverTransform,
-  averagePoint,
-  getBBox
-} from '../geometry/face-geometry.ts';
+import { computeCoverTransform, averagePoint, getBBox } from '../geometry/face-geometry.ts';
 import type { FaceLandmarkerResult } from '../tracking.ts';
 
 type Landmark = { x: number; y: number; z: number };

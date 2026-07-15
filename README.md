@@ -22,16 +22,17 @@ Browser video calling "something" with camera effects.
   </tr>
 </table>
 
-
 ## 1. Project overview and demo
 
 ### What this project is
+
 - A monorepo for video calls with:
   - local camera effects (debug face landmarks, 3D mask demo, image backgrounds for 3D model),
   - LiveKit-based communication,
   - an Express signaling API for rooms and tokens.
 
 ### Monorepo structure
+
 - `apps/web-app` - SvelteKit 2 + Svelte 5 + Tailwind 4 client
 - `apps/signaling-server` - Express 5 API (control plane only)
 - Camera and Calls domain logic lives under `apps/web-app/src/lib/camera/*`
@@ -46,15 +47,18 @@ Browser video calling "something" with camera effects.
 ## 3. System requirements and dependencies
 
 ### Required
+
 - Node.js **24+**
 - pnpm **10.22.0** (pinned in `packageManager`)
 
 ### Main technologies
+
 - SvelteKit 2, Svelte 5, Tailwind 4, TypeScript
 - Express 5, `livekit-server-sdk`
 - MediaPipe face landmarks, Three.js renderer pipeline
 
 ### Environment variables (signaling server)
+
 - `PORT`
 - `LIVEKIT_URL`
 - `LIVEKIT_API_KEY`
@@ -131,12 +135,14 @@ pnpm --filter signaling-server smoke
 ## 6. Deployment
 
 ### CI/CD (current flow)
+
 - GitHub Actions workflow: `.github/workflows/deploy-signaling.yml`
 - Deploy target: Oracle VM via SSH + PM2
 - Trigger: push to `main` affecting `apps/signaling-server/**` or workflow file
 - _P.S. I'm using Oracle Cloud VM and Vercel for the web app. But you can also deploy both apps on a single VM._
 
 ### VM runtime model
+
 - Keep signaling server as a PM2 process (`signaling`)
 - Keep LiveKit external (media never goes through signaling-server)
 - Set production secrets in GitHub Actions:
@@ -175,6 +181,7 @@ pnpm --filter signaling-server test
 No license for now? or WTFPL
 
 ## 9. What I used
+
 - [LiveKit](https://livekit.io/) for the WebRTC infrastructure and SDKs.
 - [MediaPipe](https://developers.google.com/mediapipe) for face landmark detection and tracking.
 - [Three.js](https://threejs.org/) for 3D rendering and effects.
@@ -192,7 +199,8 @@ No license for now? or WTFPL
 - [Oracle Cloud](https://www.oracle.com/cloud/) for cloud hosting and infrastructure services.
 - [caddy](https://caddyserver.com/) for reverse proxy and TLS termination.
 
-Inspiration: 
+Inspiration:
+
 - [google ai mediapipe](https://github.com/google-ai-edge/mediapipe)
 - [some yt-guy](https://www.youtube.com/watch?v=WY9W1ghMGWA)
 - [TheBurntPeanut](https://www.twitch.tv/theburntpeanut)
@@ -209,4 +217,5 @@ Inspiration:
 - Make it fast
 
 ## 10. AI
+
 Hell yeah, I used AI for code generation and assistance. The AI is used to help with code, refactoring suggestions, and documentation improvements. All AI-generated code is reviewed by the developer to ensure quality and correctness.
