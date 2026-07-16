@@ -336,6 +336,7 @@ export class ThreeMaskRenderer {
     if (!categories || this.morphMeshes.length === 0) return;
 
     const SMOOTH = 0.5;
+    const GAIN = 1.4;
 
     for (const mesh of this.morphMeshes) {
       const dict = mesh.morphTargetDictionary!;
@@ -355,8 +356,9 @@ export class ThreeMaskRenderer {
         }
         if (idx === undefined) continue;
 
+        const boosted = Math.min(1, cat.score * GAIN);
         const prev = this.blendshapeSmooth.get(name) ?? 0;
-        const next = prev + (cat.score - prev) * (1 - SMOOTH);
+        const next = prev + (boosted - prev) * (1 - SMOOTH);
         this.blendshapeSmooth.set(name, next);
 
         influences[idx] = next;
